@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>骨シルエット ローポリ v12</title>
+<link rel="stylesheet" href="workshop/style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="over"></canvas>
+<div class="bar" id="top">
+  <div class="seg" id="modes"><button data-m="bone" class="on">骨<span class="kb">Q</span></button><button data-m="sil">シルエット<span class="kb">W</span></button><button data-m="shape">細部<span class="kb">E</span></button><button data-m="pose">アニメ<span class="kb">R</span></button><button data-m="paint">色塗り</button></div>
+  <button class="btn" id="undo">戻す<span class="kb">Ctrl+Z</span></button><button class="btn" id="redo">やり直す<span class="kb">Ctrl+Y</span></button>
+  <span class="grow"></span>
+  <button class="btn on" id="sym">左右対称<span class="kb">M</span></button><button class="btn" id="axisBtn">対称軸</button><button class="btn" id="look">なめらか</button><button class="btn" id="saveBtn">保存<span class="kb">Ctrl+S</span></button><button class="btn" id="worksBtn">作品<span id="workName"></span></button><span id="cloudSt"></span>
+</div>
+<div class="bar" id="top2">
+  <div id="paintPicker" style="display:none;position:fixed;z-index:20;left:12px;width:min(192px,calc(100vw - 24px));box-sizing:border-box;flex-direction:column;align-items:stretch;gap:8px;background:#faf7f1;border:1.5px solid #cfc7b8;border-radius:14px;padding:10px;box-shadow:0 4px 15px #0002;font-weight:800;overflow:auto">
+  <label style="display:flex;gap:8px;align-items:center;justify-content:space-between">🎨 現在の色 <input id="paintColor" type="color" value="#d9572b" style="width:40px;height:30px;padding:0;border:0;background:transparent"></label>
+  <div id="paintSV" role="group" aria-label="彩度と明るさ" tabindex="0" style="position:relative;width:100%;aspect-ratio:1;flex:none;cursor:crosshair;touch-action:none;border:1px solid #aaa;border-radius:4px;box-sizing:border-box;background-color:#ff0000;background-image:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent)">
+    <span id="paintDot" style="position:absolute;width:13px;height:13px;box-sizing:border-box;border:2px solid white;border-radius:50%;box-shadow:0 0 0 1px #3339;transform:translate(-50%,-50%);pointer-events:none"></span>
+  </div>
+  <input id="paintHue" aria-label="色相" type="range" min="0" max="360" value="0" style="width:100%;margin:0;accent-color:#d9572b;background:linear-gradient(to right,red,#ff0,#0f0,#0ff,#00f,#f0f,red);border-radius:12px">
+</div>
+  <div class="seg" id="views"><button data-p="front">正面<span class="kb">1</span></button><button data-p="q">ナナメ<span class="kb">2</span></button><button data-p="side">横<span class="kb">3</span></button><button data-p="top">上<span class="kb">4</span></button><button data-p="back">後ろ<span class="kb">5</span></button></div>
+  <div class="seg" id="elm" style="display:none"><button data-e="v" class="on">点</button><button data-e="e">線</button><button data-e="f">面</button></div>
+  <button class="btn" id="lassoBtn">投げ縄</button><button class="btn" id="loopBtn" style="display:none" title="選んだ点から一周（見える点だけ）">輪を選ぶ</button><button class="btn" id="stripBtn" style="display:none" title="選んだ点から縦方向（見える点だけ）">縦を選ぶ</button><button class="btn" id="detailInkBtn" style="display:none">顔ライン</button><input type="color" id="detailInkColor" title="線の色" value="#2b2a27" style="display:none;width:36px;height:30px"><button class="btn" id="detailInkDel" style="display:none">最後の線を消す</button><button class="btn" id="addBtn" style="display:none">足して選ぶ</button><button class="btn" id="allBtn">全部選ぶ<span class="kb">Ctrl+A</span></button><button class="btn" id="autoLinkBtn">自動でつなぐ</button><button class="btn" id="flipBtn">前後反転</button><button class="btn" id="groundBtn">地面に置く<span class="kb">G</span></button>
+</div>
+<div id="panel"><label id="silSizeWrap" style="display:none;align-items:center;gap:6px">ふくらみ <input id="silSize" type="range" min="50" max="200" value="100" style="width:110px"><span id="silSizeLbl">100%</span></label><span id="pname">骨</span><button class="btn" id="addJBtn">関節を足す</button><button class="btn" id="linkBtn">つなぐ</button><button class="btn" id="unlinkBtn">つながりを外す</button><button class="btn" id="alignBtn">反対側にそろえる</button><button class="btn" id="sides">8角</button><button class="btn" id="resetShape">形のいじりを戻す</button><button class="btn" id="del" style="color:#c0392b">この骨を消す<span class="kb">Del</span></button></div>
+<div id="toast"></div>
+<div id="tl"><div class="row"><select class="btn" id="actSel"></select><button class="btn" id="actDup">複製</button><span id="tplGrp" style="display:none;gap:4px;align-items:center"><span class="lb2" style="min-width:0;font-size:11px;color:var(--sub)">お手本に戻す</span><button class="btn" id="tplAct" title="この動きをまるごとお手本に戻す">この動き</button><button class="btn" id="tplBone" title="選んでる骨（と反対側）の動きだけお手本に戻す">この骨</button><button class="btn" id="tplAll" title="形も動きも、拾った時の状態に戻す">全部</button></span><button class="btn" id="boneOnly">骨だけ</button><button class="btn" id="playBtn">▶ 再生</button><span class="kb" style="align-self:center">Space</span><span id="frameLbl"></span><span class="kb" style="align-self:center">←→</span><button class="btn" id="keyAdd">原画を置く<span class="kb">K</span></button><button class="btn" id="keyDel">原画を消す</button><button class="btn" id="holdBtn">止め</button><button class="btn" id="trajBtn">軌道</button><button class="btn" id="trajDel" style="display:none">この軌道を自動に戻す</button><button class="btn" id="fixDel" style="display:none">手直しを戻す</button><span class="grow"></span><button class="btn" id="lenBtn">長さ 48</button></div>
+<div class="row" id="segRow"><span class="lb">中割り</span><input type="range" id="nSl" min="0" max="12" step="1"><span id="nLbl" class="lb2"></span><span class="lb" style="margin-left:10px">先ツメ</span><input type="range" id="bSl" min="-100" max="100" step="5"><span class="lb">後ツメ</span><span id="bLbl" class="lb2"></span></div><div class="row" id="paceLab"><button class="btn" id="paceTestBtn">▶ 10m試走</button><div id="paceTrack"><i id="paceFill"></i></div><span id="paceInfo">歩き・走るを選んで試走。足の動きを測定します</span></div><canvas id="tlc"></canvas></div>
+<div id="worksDlg"><div class="card"><div class="hd">作品 <span class="grow"></span><button class="btn" id="newWork">新しく作る</button><button class="btn" id="saveAs">別の作品として保存</button><button class="btn" id="fSave">ファイルに保存</button><button class="btn" id="xOut">文字で書き出す</button><button class="btn" id="xIn">読み込む</button><button class="btn" id="closeWorks">閉じる</button></div><div id="xfer" style="display:none"><div id="xNote"></div><textarea id="xText" spellcheck="false"></textarea><div class="xrow"><button class="btn" id="xCopy">コピー</button><button class="btn" id="xFile">ファイルから</button><button class="btn on" id="xLoad">この中身を読み込む</button><button class="btn" id="xClose">閉じる</button></div><input type="file" id="xFileIn" accept=".json,.txt,application/json,text/plain" style="display:none"></div><div id="worksList"></div></div></div>
+<div id="hint"></div>
+
+
+<script src="vendor/three.min.js"></script>
+<script src="shared/project-data.js"></script>
+<script src="shared/storage.js"></script>
+<script src="shared/templates.js"></script>
+<script src="shared/bones.js"></script>
+<script src="workshop/app.js"></script>
+</body>
+</html>
+

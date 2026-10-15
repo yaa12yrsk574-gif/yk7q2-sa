@@ -1,0 +1,8 @@
+
+html,body{margin:0;height:100%;overflow:hidden;background:#ece7dd;font-family:"Hiragino Sans","Zen Kaku Gothic New",sans-serif}
+iframe{position:fixed;inset:0;width:100%;height:100%;border:0;display:none}
+iframe.on{display:block}
+#tabs{position:fixed;right:8px;top:50%;transform:translateY(-50%);z-index:50;display:flex;flex-direction:column;background:rgba(43,42,39,.9);border-radius:16px;padding:4px;gap:4px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+#tabs button{font:inherit;font-weight:900;font-size:14px;border:0;border-radius:12px;padding:12px 10px;background:transparent;color:#fff;opacity:.7}
+#tabs button.on{background:#d9572b;opacity:1}
+#cloudSt{color:#fff;opacity:.75;font-size:10px;font-weight:800;text-align:center;max-width:4.6em;line-height:1.25;padding:2px 0}#cloudSt:empty{display:none}
