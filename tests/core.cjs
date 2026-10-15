@@ -36,7 +36,7 @@ if(require.main===module){
  const works=[{id:'legacy',name:'old work',data:{bones:[],custom:{kept:true}}}];
  assert.equal(ctx.BoneStorage.saveWorks(works),true);assert.equal(JSON.stringify(ctx.BoneStorage.loadWorks()),JSON.stringify(works));
  ctx.BoneStorage.saveDraft(works[0].data);assert.equal(disk.get('yuya_bone_lowpoly_v1'),JSON.stringify(works[0].data));
- for(const file of ['index.html','workshop.html','hunting.html'])for(const m of read(file).matchAll(/(?:src|href)="([^"]+)"/g))assert(fs.existsSync(path.join(root,m[1])),file+' missing '+m[1]);
+ for(const file of ['index.html','workshop.html','hunting.html'])for(const m of read(file).matchAll(/(?:src|href)="([^"]+)"/g))assert(fs.existsSync(path.join(root,m[1].split('?')[0])),file+' missing '+m[1]);
  for(const dir of ['shared','workshop','hunting'])for(const f of fs.readdirSync(path.join(root,dir)))if(f.endsWith('.js'))new vm.Script(read(dir+'/'+f));
  // Enemy spawning reads works before the companion UI section initializes.
  const hunting=read('hunting/app.js'),loadWorks=hunting.match(/function loadWorks\(\) \{[^\n]+\}/)[0];

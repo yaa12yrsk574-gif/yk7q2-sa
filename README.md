@@ -23,9 +23,12 @@ GitHub main が正本。`index.html` を入口に、工房と狩り場を毎回�
 ## 検証
 
 ```
+node scripts/version-assets.cjs
 node tests/core.cjs
 node tests/input-guards.cjs
 ```
+
+変更後は `version-assets.cjs` で参照 URL の内容ハッシュを更新し、更新された HTML と shell.js も同時にコミットする。ブラウザの古いキャッシュと新しいコードの混在を防ぐ。ビルドや依存パッケージのインストールは不要。
 
 `core-baseline.json` は分割前 main `115fb729a4ca83b9ac3740e9c8f79a1570effde7` の実計算結果のハッシュ。種族の形・各動作の全コマ・歩行性能、自由制作の変形・軌道・中割りを比較する。入力テストは骨削除処理の直接呼出しも含む。テストだけで実機確認済みとはしない。
 
