@@ -38,6 +38,9 @@ if(require.main===module){
  ctx.BoneStorage.saveDraft(works[0].data);assert.equal(disk.get('yuya_bone_lowpoly_v1'),JSON.stringify(works[0].data));
  for(const file of ['index.html','workshop.html','hunting.html'])for(const m of read(file).matchAll(/(?:src|href)="([^"]+)"/g))assert(fs.existsSync(path.join(root,m[1])),file+' missing '+m[1]);
  for(const dir of ['shared','workshop','hunting'])for(const f of fs.readdirSync(path.join(root,dir)))if(f.endsWith('.js'))new vm.Script(read(dir+'/'+f));
- console.log('PASS '+Object.keys(expected).length+' legacy calculation snapshots; isolated state, storage compatibility, script syntax and resource paths');
+ // Enemy spawning reads works before the companion UI section initializes.
+ const hunting=read('hunting/app.js'),loadWorks=hunting.match(/function loadWorks\(\) \{[^\n]+\}/)[0];
+ assert.equal(vm.runInContext('JSON.stringify(loadWorks());'+loadWorks,ctx),JSON.stringify(works));
+ console.log('PASS '+Object.keys(expected).length+' legacy calculation snapshots; startup storage access, isolated state, storage compatibility, script syntax and resource paths');
 }
 

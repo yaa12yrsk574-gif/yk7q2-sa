@@ -156,7 +156,7 @@ spawnTokage(5, 4); spawnDummy(-3, 3); spawnDummy(-4.5, 1.5); spawnDummy(-3, -0.2
 const drops = [];
 // ============ 相棒 ============
 let mate = null; // { work, body, x, z, yaw, atk:{f, anim, hit:Set, maxV, prev}, lunge }
-const loadWorks = window.BoneStorage.loadWorks;
+function loadWorks() { return window.BoneStorage.loadWorks(); }
 function animOf(d, slot) { if (!d || !d.acts) return null; const i = d.acts.findIndex(a => a.slot === slot); if (i < 0) return null; const A = i === d.actI ? d.anim : d.acts[i].anim; return A && A.keys && A.keys.length >= 2 ? A : null; }
 const attackOf = d => animOf(d, 'attack');
 // 体を動きの f コマ目にする（同じコマは覚えておく）
