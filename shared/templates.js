@@ -81,5 +81,7 @@ window.BoneTemplates = (() => {
   function slots(kind) { return KINDS[kind] ? kindAct(kind).acts.map(a => ({ slot: a.slot, name: a.name })) : []; }
   // アニメのキーを f で読む（骨だけ戻す用：間はまっすぐつなぐ）
   function sample(A, f, id) { const K = A.keys; if (!K.length) return null; let a = K[0], b = null; for (const k of K) { if (k.f <= f) a = k; else { b = k; break; } } if (!b && A.loop) b = { f: A.len, pose: K[0].pose }; const pa = a.pose[id]; if (!b || !pa) return pa ? cl(pa) : null; const pb = b.pose[id]; if (!pb || pb.length !== pa.length) return cl(pa); const t = (f - a.f) / ((b.f - a.f) || 1); return pa.map((p, i) => R4(p.map((v, k) => v + (pb[i][k] - v) * t))); }
-  return { KINDS, detect, animFor, slots, sample, retarget, data: k => KINDS[k] && KINDS[k].data() };
+  // お手本の骨の上でポーズを作る（野生個体の動き用。工房と同じ骨・同じポーズの作り方）
+  const poseOf = (kind, o) => kind === 'tokage' ? tokPose(kindAct('tokage').R, o) : null;
+  return { KINDS, detect, animFor, slots, sample, retarget, poseOf, data: k => KINDS[k] && KINDS[k].data() };
 })();

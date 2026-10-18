@@ -516,7 +516,7 @@ function tlLayout() { const r = tlc.getBoundingClientRect(), d = Math.min(2, dev
 const TL = { x0: 18, w: () => tlc.getBoundingClientRect().width - 36 };
 const fx = f => TL.x0 + f / S.anim.len * TL.w();
 const $ = id => document.getElementById(id);
-function drawTL() { if (mode !== 'pose' || !S.anim) return; const r = tlc.getBoundingClientRect(), Wt = r.width, Ht = r.height; tg.clearRect(0, 0, Wt, Ht);
+function drawTL() { syncSize(); if (mode !== 'pose' || !S.anim) return; const r = tlc.getBoundingClientRect(), Wt = r.width, Ht = r.height; tg.clearRect(0, 0, Wt, Ht);
   const A = S.anim, { a, b } = segInfo(ANIM.f);
   if (a && b) { const xa = fx(a.f), xb = fx(b.f), y = 14, sp = spacingOf(a, b); tg.fillStyle = 'rgba(138,79,208,.08)'; tg.fillRect(xa, 2, xb - xa, Ht - 4); tg.strokeStyle = '#2b2a27'; tg.lineWidth = 2; tg.beginPath(); tg.moveTo(xa, y); tg.lineTo(xb, y); tg.stroke();
     for (const x of [xa, xb]) { tg.beginPath(); tg.moveTo(x, y - 8); tg.lineTo(x, y + 8); tg.stroke(); }
@@ -565,13 +565,20 @@ $('trajDel').onclick = () => { const { a } = segInfo(ANIM.f); if (!a || !ANIM.ts
 $('fixDel').onclick = () => { const { a, b } = segInfo(ANIM.f); if (!a || !b) return; pushUndo(); delete segOf(a).fix[drawIdx(a, b, ANIM.f)]; applyPose(poseAt(ANIM.f)); needRebuild = true; save(); drawTL(); };
 // 工房で10mの計算上の試走。狩り場の移動性能と同じ値を使う。
 let paceTrial=null;
+// 大きさ（体全体の倍率）。形は今のまま、狩り場で体ごと拡大・縮小する
+function syncSize(){const sl=document.getElementById('sizeSl');if(!sl||!S)return;const v=window.BodyMotion.sizeOf(S);if(document.activeElement!==sl)sl.value=Math.round(v*100);document.getElementById('sizeLbl').textContent='×'+v.toFixed(2);}
+{const sl=document.getElementById('sizeSl');
+  sl.addEventListener('pointerdown',()=>pushUndo());
+  sl.addEventListener('keydown',()=>pushUndo());
+  sl.addEventListener('input',()=>{const v=Math.max(0.5,Math.min(2,(+sl.value||100)/100));if(Math.abs(v-1)<1e-6)delete S.size;else S.size=Math.round(v*100)/100;syncSize();save();
+    const p=window.BodyMotion.perf(v,1,'run');document.getElementById('paceInfo').textContent='大きさ×'+v.toFixed(2)+'：体重×'+p.mass.toFixed(1)+'　力×'+p.power.toFixed(1)+'　加速・小回り '+Math.round(p.agility*100)+'%'+(p.need>1?'　この体が要る動き '+Math.round(p.need*100)+'%':'')+'（保存すると狩り場に反映）';});}
 document.getElementById('paceTestBtn').onclick=()=>{
   if(mode!=='pose'||!S.anim||!S.acts||!S.acts[S.actI])return;
   const action=S.acts[S.actI],slot=action.slot;
   if(slot!=='walk'&&slot!=='run'){toast('「歩き」か「走る」を選んでな');return;}
-  const q=measureGaitQuality(S,S.anim,slot);
-  const speed=(slot==='walk'?1.45:3.4)*q.factor,seconds=10/Math.max(0.1,speed);
-  document.getElementById('paceInfo').textContent=action.name+'：予測 '+speed.toFixed(2)+'m/秒（お手本比 '+Math.round(q.factor*100)+'%）／10m '+seconds.toFixed(1)+'秒　※足先の動きによる仮計算';
+  const q=measureGaitQuality(S,S.anim,slot),M=window.BodyMotion,size=M.sizeOf(S),p=M.perf(size,q.factor,slot);
+  const speed=p.top,seconds=M.runTime(p,10),fit=Math.min(1,q.factor/p.need);
+  document.getElementById('paceInfo').textContent=action.name+'：最高速 '+speed.toFixed(2)+'m/秒／10m '+seconds.toFixed(1)+'秒（大きさ×'+size.toFixed(2)+'　足運び お手本比'+Math.round(q.factor*100)+'%'+(p.need>1?'　この体が要る動き '+Math.round(p.need*100)+'%'+(fit<1?'→足りてへん':'→足りてる'):'')+'　加速・小回り '+Math.round(p.agility*100)+'%）';
   document.getElementById('paceFill').style.width='0%';
   paceTrial={start:performance.now(),ms:seconds*1000};
   ANIM.playing=true;ANIM.last=performance.now();drawTL();
