@@ -455,7 +455,7 @@ function commitPose() { if (inMirroredHalf()) { toast('後半は前半の反転�
 function gotoFrame(f) { ANIM.f = Math.max(0, Math.min(S.anim.len, Math.round(f))); const { a } = segInfo(ANIM.f); if (ANIM.tsel && (!a || ANIM.tsel.a !== a.f)) ANIM.tsel = null; applyPose(poseAt(ANIM.f)); applyPins(); needRebuild = true; drawTL(); }
 // ---- 回転ギズモ（関節を選ぶと、X・Y・Z の輪） ----
 function rotIdx(b) { const last = b.pts.length - 1; return selJ === last && selJ > 0 && !S.bones.some(c => c.parent === b.id && c.at === last) ? selJ - 1 : selJ; } /* 先っぽは一つ手前で回す */
-function rotPivot() { if (mode !== 'pose' || sel == null || selJ == null) return null; const b = boneById(sel); if (!b || !b.pts[selJ]) return null; const P = V3(b.pts[rotIdx(b)]); if (selMir) P.x = -P.x; return P; }
+function rotPivot() { if ((mode !== 'pose' && mode !== 'bone') || sel == null || selJ == null) return null; const b = boneById(sel); if (!b || !b.pts[selJ]) return null; const P = V3(b.pts[rotIdx(b)]); if (selMir) P.x = -P.x; return P; }
 function rotRings() { const C = rotPivot(); if (!C) return null; const sa = proj(C), b = proj(C.clone().add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(0.01))), R = 62 * 0.01 / Math.max(1e-6, Math.hypot(b.x - sa.x, b.y - sa.y));
   return { C, sa, R, rings: AXES.map(a => { const u = Math.abs(a.v.y) < 0.9 ? new THREE.Vector3(0, 1, 0).cross(a.v).normalize() : new THREE.Vector3(1, 0, 0), v = a.v.clone().cross(u).normalize(), pts = [];
     for (let i = 0; i <= 48; i++) { const t = i / 48 * Math.PI * 2, P = C.clone().addScaledVector(u, Math.cos(t) * R).addScaledVector(v, Math.sin(t) * R); pts.push({ P, s: proj(P) }); } return { ...a, pts }; }) }; }
@@ -664,6 +664,7 @@ over.addEventListener('pointerdown', e => {
   const intent=editorInput.intent(e); if(intent==='ignore')return; if (intent === 'camera') { st.cam = { id: e.pointerId, x, y, pan: e.shiftKey }; orbit.goal = null; return; } /* 中ボタン（かAlt＋左）で回す、Shift付きで平行移動 */
   if (intent === 'select') { st.stroke = { id: e.pointerId, pts: [{ x, y }], lasso: mode === 'bone' || mode === 'pose', rclick: true, add: e.shiftKey }; return; }
   if(mode==='shape'&&detailInkMode&&e.button===0){st.stroke={id:e.pointerId,pts:[{x,y}],detailInk:true};return;} /* 右クリック：押すだけ＝1本だけ選ぶ／なぞる＝投げ縄 */
+  if (mode === 'bone' && !lassoMode && !axisMode) { const rh = rotHit(x, y, !pen); if (rh && !rh.center) { startRot(e, rh); st.drag.cids = centerIds(); return; } } /* 骨モード：輪っか＝回す（矢印＝動かす） */
   const gh =!lassoMode && gizmoHit(x, y, !pen); if (gh && !fingers.size) { startGizmo(e, gh); return; }
   if (!pen || fingers.size) { fingers.set(e.pointerId, { x, y }); if (fingers.size === 2) { const [a, c] = [...fingers.values()]; pinch = { d: Math.hypot(a.x - c.x, a.y - c.y), dist: orbit.dist, m: { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 } }; st.tap = null; } else st.tap = { x, y, t: performance.now() };
     if (pen && fingers.size === 1) fingers.delete(e.pointerId); else return; }
@@ -737,6 +738,7 @@ const up = e => {
     if (lastPT !== 'mouse' && d.kind === 'poseJ') { setSel([d.b.id, ...descIds(d.b.id)]); sel = d.b.id; if (selJ === d.i && selMir === !!d.mir) selJ = null; else { selJ = d.i; selMir = !!d.mir; } }
     if (d.kind === 'ik' && pinsOf().some(p => p.id === d.b.id)) setPinAt(d.b); /* 留めてる先っぽを引っぱったら、留め場所も動く */
     if ((d.kind === 'pose' || d.kind === 'ik' || d.kind === 'propMove' || (d.kind === 'rot' && d.pushed)) && mode === 'pose') commitPose();
+    if (d.kind === 'rot' && d.pushed && mode === 'bone') { for (const c of S.bones) updOff(c); syncTwins(); rebuild(); save(); } /* 骨の形として残す */
     needRebuild = true; needDraw = true; }
 };
 over.addEventListener('pointerup', up); over.addEventListener('pointercancel', up);
@@ -881,7 +883,7 @@ function draw() {
       og.font = '900 12px sans-serif'; og.textAlign = 'center'; og.fillText(a.label, a.e.x + Math.cos(an) * 20, a.e.y + Math.sin(an) * 20 + 4); }
     og.fillStyle = '#fff'; og.strokeStyle = '#2b2a27'; og.lineWidth = 2; og.beginPath(); og.arc(g.sa.x, g.sa.y, 7, 0, 7); og.fill(); og.stroke(); }
   const stk = st.stroke; if (stk && stk.pts.length > 1) { if (stk.lasso) og.setLineDash([7, 5]); og.strokeStyle = stk.lasso ? 'rgba(43,42,39,.85)' : stk.traj != null ? 'rgba(138,79,208,.95)' : mode === 'sil' ? 'rgba(47,111,208,.9)' : 'rgba(217,87,43,.9)'; og.lineWidth = 3; og.beginPath(); stk.pts.forEach((p, i) => i ? og.lineTo(p.x, p.y) : og.moveTo(p.x, p.y)); if (stk.lasso) og.closePath(); og.stroke(); og.setLineDash([]); }
-  if (mode === 'pose') { drawTraj(); if (!ANIM.traj) drawRot(); }
+  if (mode === 'pose') { drawTraj(); if (!ANIM.traj) drawRot(); } else if (mode === 'bone') drawRot(); /* 骨モードでも関節の輪っかで回す */
   const pn = document.getElementById('panel'), showP = b && mode !== 'shape' && mode !== 'pose'; document.getElementById('silSizeWrap').style.display=mode==='sil'&&b?'flex':'none'; pn.style.display = showP ? 'flex' : 'none'; document.body.classList.toggle('panelOn', !!showP); /* パネルが出てる間はヒントを引っこめる（重なり防止） */
   if (showP) { document.getElementById('sides').textContent = (b.sides || 8) + '角'; document.getElementById('pname').textContent = selJ != null && mode === 'bone' ? '関節' : SELB.length ? '骨×' + (SELB.length + 1) : '骨'; }
 }
