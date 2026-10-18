@@ -123,7 +123,19 @@ window.BoneTemplates = (() => {
         keys.push({ f, pose: tsuPose(R, Object.assign({ dy: -0.03, neckPitch: -0.1 + 0.05 * Math.sin(ph), tailYaw: 0.4 * Math.sin(ph + 1.2), legs }, { up: -0.1, fold: 0.4, sweep: -1.1 })) }); }
       out.push({ slot: 'swim', name: '泳ぐ', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'かく' }, { f: 8, label: '逆でかく' }], keys, seg: {} } }); }
     return { R, acts: out }; }
-  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs } };
+  // ===== 人の素体（アニメ工房用）=====
+  function hitoData() { const B = [], P = (...a) => a.map(([t, r]) => ({ t, r }));
+    const addB = (id, parent, at, pts, w, d) => { B.push({ id, parent, at, pts, wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 8 }); };
+    addB(1, null, null, [[0, .95, 0], [0, 1.15, .015], [0, 1.38, 0]], P([0, .14], [.5, .12], [1, .16]), P([0, .1], [.5, .09], [1, .1]));
+    addB(2, 1, 2, [[0, 1.38, 0], [0, 1.48, .01], [0, 1.72, .02]], P([0, .05], [.35, .05], [.6, .1], [1, .07]), P([0, .05], [.35, .05], [.6, .11], [1, .08]));
+    addB(3, 1, 2, [[-.19, 1.34, 0], [-.21, 1.06, -.01], [-.21, .8, .02], [-.21, .7, .03]], P([0, .05], [.4, .04], [.75, .032], [1, .035]), P([0, .05], [.4, .04], [.75, .03], [1, .02]));
+    addB(5, 1, 0, [[-.1, .92, 0], [-.11, .5, .03], [-.11, .09, 0], [-.11, .03, .13]], P([0, .075], [.45, .05], [.85, .04], [1, .035]), P([0, .08], [.45, .055], [.85, .045], [1, .03]));
+    for (const [s, t] of [[3, 4], [5, 6]]) { const b = B.find(x => x.id === s), m = cl(b); m.id = t; m.pts = b.pts.map(p => [-p[0], p[1], p[2]]); m.twin = s; b.twin = t; B.push(m); }
+    for (const b of B) { const p = b.parent != null && B.find(x => x.id === b.parent); if (p) { const q = p.pts[b.at], d = [b.pts[0][0] - q[0], b.pts[0][1] - q[1], b.pts[0][2] - q[2]]; if (Math.hypot(...d) > 0.002) b.atOff = d; } }
+    return { bones: B, sym: true, v6: 1, axis: 0, tpl: { kind: 'hito', v: 1 } }; }
+  function hitoActs() { const R = {}; for (const b of hitoData().bones) R[b.id] = b.pts; const P2 = cl(R); P2[1] = R[1].map((p, i) => [p[0], p[1] - .01 + i * .006, p[2]]);
+    return { R, acts: [{ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }, { f: 12, label: '息を吸う' }], keys: [{ f: 0, pose: cl(R) }, { f: 12, pose: P2 }], seg: {} } }] }; }
+  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs }, hito: { name: '人の素体', data: hitoData, acts: hitoActs } };
   const cache = {};
   const kindAct = k => cache[k] || (cache[k] = KINDS[k].acts());
   function detect(S) { if (S && S.tpl && KINDS[S.tpl.kind]) return S.tpl.kind; if (!S || !S.bones) return null;

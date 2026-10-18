@@ -1,6 +1,7 @@
 // Shared geometry and animation calculations for workshop and hunting.
 // State access stays per consumer; no cross-frame mutable state is shared.
-window.BoneCore = Object.freeze({create(THREE, getState, setState) {
+window.BoneCore = Object.freeze({create(THREE, getState, setState, opts) {
+const OPT = opts || {};
 const state = {get current(){return getState();},set current(value){setState(value);}};
 const TPL = window.BoneTemplates;
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -22,9 +23,19 @@ function smoothPath(P, n) {
 function profAt(pr, t) { if (!pr || !pr.length) return 0.04; if (t <= pr[0].t) return pr[0].r; if (t >= pr[pr.length - 1].t) return pr[pr.length - 1].r;
   for (let i = 0; i < pr.length - 1; i++) if (t <= pr[i + 1].t) { const u = (t - pr[i].t) / Math.max(1e-9, pr[i + 1].t - pr[i].t), s = u * u * (3 - 2 * u); return pr[i].r + (pr[i + 1].r - pr[i].r) * s; } return pr[pr.length - 1].r; }
 function frames(path) { const Z = new THREE.Vector3(0, 0, 1), X = new THREE.Vector3(1, 0, 0);
+  if (OPT.transport) return framesTransport(path, Z, X);
   return path.map((p, i) => { const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)], T = b.clone().sub(a).normalize();
     let Wd = new THREE.Vector3().crossVectors(T, Z); if (Wd.lengthSq() < 0.04) Wd = new THREE.Vector3().crossVectors(T, X); Wd.normalize(); if (Wd.x < -1e-6 || (Math.abs(Wd.x) < 1e-6 && Wd.y < 0)) Wd.negate();
     const Dd = new THREE.Vector3().crossVectors(Wd, T).normalize(); if (Dd.z < 0) Dd.negate(); return { T, Wd, Dd }; }); }
+// ねじれない断面の向き：最初の輪だけ今までの決め方、あとは前の輪の向きを、骨の曲がった分だけ回して引き継ぐ（途中で90°や180°跳ばない）
+function framesTransport(path, Z, X) { const out = []; let W = null;
+  for (let i = 0; i < path.length; i++) { const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)], T = b.clone().sub(a).normalize();
+    if (!W) { W = new THREE.Vector3().crossVectors(T, Z); if (W.lengthSq() < 0.04) W = new THREE.Vector3().crossVectors(T, X); W.normalize(); if (W.x < -1e-6 || (Math.abs(W.x) < 1e-6 && W.y < 0)) W.negate(); }
+    else { const Tp = out[i - 1].T, q = new THREE.Quaternion().setFromUnitVectors(Tp, T); W = W.clone().applyQuaternion(q); W.addScaledVector(T, -W.dot(T)).normalize(); }
+    out.push({ T, Wd: W.clone(), Dd: null }); }
+  const D0 = new THREE.Vector3().crossVectors(out[0].Wd, out[0].T).normalize(), flip = D0.z < 0 ? -1 : 1;
+  for (const f of out) f.Dd = new THREE.Vector3().crossVectors(f.Wd, f.T).normalize().multiplyScalar(flip);
+  return out; }
 function boneGeom(b) { // 元の側の形（鏡はこれを左右反転して作る）
   const P = ptsOf(b, false); if (P.length < 2) return null;
   const rings = ringsOf(b), path = smoothPath(P, rings).pts, F = frames(path), n = b.sides || 8, V = [], I = [];
