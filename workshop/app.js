@@ -400,7 +400,13 @@ const SLOTS = { idle: { name: '待機', len: 24, loop: true, guides: [[0, 'は�
   notice: { name: '気づく', len: 12, loop: false, guides: [[0, 'ふだん'], [3, 'ハッ'], [8, 'ふり向く']] }, run: { name: '走る', len: 12, loop: true, guides: [[0, '接地'], [3, '通過'], [6, '逆足で接地'], [9, '通過']] }, flee: { name: '逃げる', len: 12, loop: true, guides: [[0, '踏み切り'], [3, '伸び'], [6, '着地'], [9, '縮み']] },
   threat: { name: '威嚇', len: 24, loop: false, guides: [[0, 'かまえ'], [6, '溜め'], [12, '威嚇！'], [24, '戻り']] },
   attack: { name: '攻撃', len: 16, loop: false, guides: [[0, 'かまえ'], [5, '溜め'], [8, '打つ！'], [16, '戻り']] },
-  attack_fast: { name: '速い技', len: 10, loop: false, guides: [[0, '構え'], [2, '小さく溜め'], [4, '突き！'], [10, '戻り']] } };
+  attack_fast: { name: '速い技', len: 10, loop: false, guides: [[0, '構え'], [2, '小さく溜め'], [4, '突き！'], [10, '戻り']] },
+  jump: { name: 'ジャンプ', len: 14, loop: false, guides: [[0, '構え'], [5, '溜め'], [7, '踏み切り'], [14, '空中']] },
+  flap: { name: '羽ばたき', len: 12, loop: false, guides: [[0, '振り上げ'], [6, '打ち下ろし'], [12, '戻り']] },
+  glide: { name: '滑空', len: 24, loop: true, guides: [[0, '広げる']] },
+  fall: { name: '落下', len: 12, loop: true, guides: [[0, '落ちる']] },
+  land: { name: '着地', len: 10, loop: false, guides: [[0, '着地'], [3, '沈み'], [10, '戻り']] },
+  swim: { name: '泳ぐ', len: 16, loop: true, guides: [[0, 'かく'], [8, '逆でかく']] } };
 function newAnim(slot) { { const k = TPL.detect(S), A = k && TPL.animFor(k, slot, S.rest || snapshot(), S.bones); if (A) return A; } /* 設計図にお手本があればそれで始める */ const T = SLOTS[slot] || SLOTS.idle; return { len: T.len, loop: T.loop, guides: T.guides.map(([f, label]) => ({ f, label })), keys: [{ f: 0, pose: clone(S.rest || snapshot()) }], seg: {} }; }
 function drawActSel() { const el = $('actSel'); if (!S.acts) return; const sig = JSON.stringify([S.acts.map(a => a.name), S.actI]); if (el.dataset.sig === sig) return; el.dataset.sig = sig; el.innerHTML = '';
   S.acts.forEach((a, i) => { const o = document.createElement('option'); o.value = 'a:' + i; o.textContent = (SLOTS[a.slot] ? '' : '・') + a.name; el.appendChild(o); });
@@ -602,9 +608,9 @@ document.getElementById('paceTestBtn').onclick=()=>{
   if(mode!=='pose'||!S.anim||!S.acts||!S.acts[S.actI])return;
   const action=S.acts[S.actI],slot=action.slot;
   if(slot!=='walk'&&slot!=='run'){toast('「歩き」か「走る」を選んでな');return;}
-  const q=measureGaitQuality(S,S.anim,slot),M=window.BodyMotion,size=M.sizeOf(S),p=M.perf(size,q.factor,slot);
+  const q=measureGaitQuality(S,S.anim,slot),M=window.BodyMotion,size=M.sizeOf(S),p=M.perf(size,1,slot); /* いまは速さ＝大きさだけ（アニメの出来は効かない） */
   const speed=p.top,seconds=M.runTime(p,10),fit=Math.min(1,q.factor/p.need);
-  document.getElementById('paceInfo').textContent=action.name+'：最高速 '+speed.toFixed(2)+'m/秒／10m '+seconds.toFixed(1)+'秒（大きさ×'+size.toFixed(2)+'　足運び お手本比'+Math.round(q.factor*100)+'%'+(p.need>1?'　この体が要る動き '+Math.round(p.need*100)+'%'+(fit<1?'→足りてへん':'→足りてる'):'')+'　加速・小回り '+Math.round(p.agility*100)+'%）';
+  document.getElementById('paceInfo').textContent=action.name+'：最高速 '+speed.toFixed(2)+'m/秒／10m '+seconds.toFixed(1)+'秒（大きさ×'+size.toFixed(2)+'　加速・小回り '+Math.round(p.agility*100)+'%）※いまは速さは大きさだけで決まる';
   document.getElementById('paceFill').style.width='0%';
   paceTrial={start:performance.now(),ms:seconds*1000};
   ANIM.playing=true;ANIM.last=performance.now();drawTL();

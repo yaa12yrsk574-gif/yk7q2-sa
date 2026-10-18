@@ -70,8 +70,60 @@ window.BoneTemplates = (() => {
           K(6, { dz: 0.04, neckPitch: -0.12 }), K(10, {})], seg: {} } }); }
     { const K = (f, o) => ({ f, pose: tokPose(R, o) });
       out.push({ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }, { f: 12, label: '息を吸う' }], keys: [K(0, {}), K(12, { dy: 0.015, arch: 0.01, neckPitch: -0.06, tailYaw: 0.12 })], seg: {} } }); }
+    // ジャンプ・落下・着地・泳ぐ（ゲームはアニメから「一番しゃがんだコマ＝溜め」「一番速く伸びるコマ＝踏み切り」を読む）
+    { const K = (f, o) => ({ f, pose: tokPose(R, o) }), tuck = d => ({ 5: [0.06, d, 0], 6: [0.06, d, 0], 7: [-0.06, d, 0], 8: [-0.06, d, 0] });
+      out.push({ slot: 'jump', name: 'ジャンプ', anim: { len: 14, loop: false, guides: [{ f: 0, label: '構え' }, { f: 5, label: '溜め' }, { f: 7, label: '踏み切り' }, { f: 14, label: '空中' }],
+        keys: [K(0, {}), K(5, { dy: -0.12, arch: -0.02, neckPitch: 0.2, tailPitch: 0.12 }), K(7, { dy: 0.06, neckPitch: -0.25, tailPitch: -0.15 }), K(14, { dy: 0.06, neckPitch: -0.1, tailPitch: -0.05, legs: tuck(0.2) })], seg: {} } });
+      out.push({ slot: 'fall', name: '落下', anim: { len: 12, loop: true, guides: [{ f: 0, label: '落ちる' }], keys: [K(0, { dy: 0.04, neckPitch: -0.15, tailPitch: -0.12, legs: tuck(0.12) }), K(6, { dy: 0.05, neckPitch: -0.22, tailPitch: -0.05, tailYaw: 0.2, legs: tuck(0.16) })], seg: {} } });
+      out.push({ slot: 'land', name: '着地', anim: { len: 10, loop: false, guides: [{ f: 0, label: '着地' }, { f: 3, label: '沈み' }, { f: 10, label: '戻り' }], keys: [K(0, { dy: 0.03, legs: tuck(0.1) }), K(3, { dy: -0.13, neckPitch: 0.25, tailPitch: 0.15 }), K(10, {})], seg: {} } });
+      const keys = []; for (let f = 0; f < 16; f += 2) { const ph = f / 16 * Math.PI * 2, legs = {}; for (const [id, off] of [[5, 0], [8, 0], [6, Math.PI], [7, Math.PI]]) { const u = ph + off; legs[id] = [0.1 * Math.cos(u), 0.12 + 0.05 * Math.sin(u), 0.03]; }
+        keys.push({ f, pose: tokPose(R, { dy: -0.02, sway: 0.05 * Math.sin(ph), neckPitch: -0.12, neckYaw: -0.1 * Math.sin(ph), tailYaw: 0.6 * Math.sin(ph + 1.2), legs }) }); }
+      out.push({ slot: 'swim', name: '泳ぐ', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'かく' }, { f: 8, label: '逆でかく' }], keys, seg: {} } }); }
     return { R, acts: out }; }
-  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs } };
+  // ===== ツバサトカゲ（翼2・脚2。飛べる）=====
+  function tsubasaData() { const B = [], P = (...a) => a.map(([t, r]) => ({ t, r }));
+    const addB = (id, parent, at, pts, w, d) => { B.push({ id, parent, at, pts, wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 8 }); };
+    addB(1, null, null, [[0, .55, -.3], [0, .6, -.05], [0, .6, .2], [0, .58, .32]], P([0, .1], [1, .075]), P([0, .1], [1, .075]));
+    addB(2, 1, 3, [[0, .58, .32], [0, .7, .45], [0, .78, .58]], P([0, .055], [1, .045]), P([0, .05], [1, .04]));
+    addB(3, 2, 2, [[0, .78, .58], [0, .76, .8]], P([0, .05], [1, .01]), P([0, .045], [1, .012]));
+    addB(4, 1, 0, [[0, .55, -.3], [0, .52, -.62], [0, .48, -.98]], P([0, .05], [1, .008]), P([0, .06], [.8, .04], [1, .09]));
+    addB(5, 1, 1, [[-.09, .52, 0], [-.11, .28, .07], [-.1, .03, 0]], P([0, .05], [1, .025]), P([0, .05], [1, .025]));
+    addB(7, 1, 2, [[-.08, .63, .15], [-.42, .68, .08], [-.86, .62, -.08]], P([0, .025], [1, .008]), P([0, .12], [.5, .2], [1, .05]));
+    for (const [s, t] of [[5, 6], [7, 8]]) { const b = B.find(x => x.id === s), m = cl(b); m.id = t; m.pts = b.pts.map(p => [-p[0], p[1], p[2]]); m.twin = s; b.twin = t; B.push(m); }
+    for (const b of B) { const p = b.parent != null && B.find(x => x.id === b.parent); if (p) { const q = p.pts[b.at], d = [b.pts[0][0] - q[0], b.pts[0][1] - q[1], b.pts[0][2] - q[2]]; if (Math.hypot(...d) > 0.002) b.atOff = d; } }
+    return { bones: B, sym: true, v6: 1, axis: 0, tpl: { kind: 'tsubasa', v: 1 } }; }
+  const rotZ = (v, a) => { const c = Math.cos(a), s = Math.sin(a); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]]; };
+  // up：翼を上げる（＋）下げる（－）／fold：肘から先を下へ折る／sweep：翼を前（＋）後ろ（－）へ／tuck：脚をたたむ（空中）
+  function tsuPose(R, o) { o = Object.assign({ dx: 0, dy: 0, dz: 0, neckPitch: 0, headPitch: 0, tailPitch: 0, tailYaw: 0, up: 0, fold: 0, sweep: 0, tuck: 0, legs: {} }, o); const P = {};
+    P[1] = R[1].map(p => [p[0] + o.dx, p[1] + o.dy, p[2] + o.dz]); const dS = sub(P[1][0], R[1][0]);
+    const neck = R[2].map(p => add(p, dS)), nb = neck[0]; P[2] = neck.map(p => rotAbout(p, nb, 0, o.neckPitch));
+    const head = R[3].map(p => rotAbout(add(p, dS), nb, 0, o.neckPitch)); P[3] = head.map(p => rotAbout(p, head[0], 0, o.headPitch));
+    P[4] = curl(R[4].map(p => add(p, dS)), o.tailYaw, o.tailPitch);
+    for (const id of [5, 6]) { const r = R[id], H = add(r[0], dS), L = o.legs[id] || [0, 0, 0], F = add(add(r[2], [L[2] || 0, L[1] || 0, L[0] || 0]), add(mul(dS, o.tuck), [0, 0.2 * o.tuck, -0.14 * o.tuck]));
+      const l1 = len(sub(r[1], r[0])), l2 = len(sub(r[2], r[1])), mid = add(r[0], mul(sub(r[2], r[0]), l1 / (l1 + l2))); P[id] = ik(H, F, l1, l2, sub(r[1], mid)); }
+    for (const id of [7, 8]) { const sg = id === 7 ? -1 : 1, r = R[id], base = add(r[0], dS);
+      let pts = r.map(p => { const v = rot(sub(p, r[0]), -sg * o.sweep, 0); return add(base, rotZ(v, sg * o.up)); });
+      const el = pts[1]; pts[2] = add(el, rotZ(sub(pts[2], el), -sg * o.fold)); P[id] = pts; }
+    for (const id in P) P[id] = P[id].map(R4); return P; }
+  function tsubasaActs() { const R = {}; for (const b of tsubasaData().bones) R[b.id] = b.pts; const out = [], K = (f, o) => ({ f, pose: tsuPose(R, o) });
+    const WF = { up: -0.25, fold: 0.5, sweep: -1.25 }; /* 地上では翼をたたんで背中に沿わせる */
+    out.push({ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }, { f: 12, label: '息を吸う' }], keys: [K(0, WF), K(12, Object.assign({ dy: 0.012, neckPitch: -0.06, tailYaw: 0.1 }, WF))], seg: {} } });
+    for (const [slot, name, n, S, Lf, ws] of [['walk', '歩き', 16, 0.1, 0.07, WF], ['run', '走る', 12, 0.16, 0.1, { up: -0.1, fold: 0.3, sweep: -0.9 }]]) { const keys = [];
+      for (let f = 0; f < n; f += 2) { const ph = f / n * Math.PI * 2, legs = {}; for (const [id, off] of [[5, 0], [6, Math.PI]]) { const u = ((ph + off) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2); legs[id] = [S * Math.cos(u), u > Math.PI ? Lf * Math.sin(u - Math.PI) : 0, 0]; }
+        keys.push({ f, pose: tsuPose(R, Object.assign({ dy: -0.03 + 0.015 * Math.cos(2 * ph), neckPitch: 0.1 * Math.cos(2 * ph), tailYaw: 0.2 * Math.sin(ph), legs }, ws)) }); }
+      out.push({ slot, name, anim: { len: n, loop: true, guides: [{ f: 0, label: '接地' }, { f: n / 4, label: '通過' }, { f: n / 2, label: '逆足で接地' }, { f: n * 3 / 4, label: '通過' }], keys, seg: {} } }); }
+    out.push({ slot: 'jump', name: 'ジャンプ', anim: { len: 14, loop: false, guides: [{ f: 0, label: '構え' }, { f: 5, label: '溜め' }, { f: 7, label: '踏み切り' }, { f: 14, label: '空中' }],
+      keys: [K(0, WF), K(5, { dy: -0.13, neckPitch: 0.25, up: 0.9, fold: -0.2, sweep: 0 }), K(7, { dy: 0.05, neckPitch: -0.2, up: -0.5, fold: 0.1 }), K(14, { dy: 0.05, up: 0.1, tuck: 1, neckPitch: -0.1 })], seg: {} } });
+    out.push({ slot: 'flap', name: '羽ばたき', anim: { len: 12, loop: false, guides: [{ f: 0, label: '振り上げ' }, { f: 6, label: '打ち下ろし' }, { f: 12, label: '戻り' }],
+      keys: [K(0, { up: 0.95, fold: 0.35, tuck: 1 }), K(3, { up: 0.7, fold: 0.15, tuck: 1 }), K(6, { up: -0.75, fold: -0.1, tuck: 1, dy: 0.03 }), K(9, { up: -0.4, fold: 0.35, tuck: 1 }), K(12, { up: 0.05, tuck: 1 })], seg: {} } });
+    out.push({ slot: 'glide', name: '滑空', anim: { len: 24, loop: true, guides: [{ f: 0, label: '広げる' }], keys: [K(0, { up: 0.05, tuck: 1, neckPitch: -0.1 }), K(12, { up: 0.12, tuck: 1, neckPitch: -0.13, tailPitch: 0.05 })], seg: {} } });
+    out.push({ slot: 'fall', name: '落下', anim: { len: 12, loop: true, guides: [{ f: 0, label: '落ちる' }], keys: [K(0, { up: 0.8, fold: 0.4, legs: { 5: [0, 0.08, 0], 6: [0, 0.08, 0] }, neckPitch: -0.15 }), K(6, { up: 0.6, fold: 0.6, legs: { 5: [0, 0.1, 0], 6: [0, 0.1, 0] }, neckPitch: -0.2 })], seg: {} } });
+    out.push({ slot: 'land', name: '着地', anim: { len: 10, loop: false, guides: [{ f: 0, label: '着地' }, { f: 3, label: '沈み' }, { f: 10, label: '戻り' }], keys: [K(0, { up: 0.6, legs: { 5: [0, 0.08, 0], 6: [0, 0.08, 0] } }), K(3, { dy: -0.12, up: 0.3, neckPitch: 0.25 }), K(10, WF)], seg: {} } });
+    { const keys = []; for (let f = 0; f < 16; f += 2) { const ph = f / 16 * Math.PI * 2, legs = {}; for (const [id, off] of [[5, 0], [6, Math.PI]]) { const u = ph + off; legs[id] = [0.12 * Math.cos(u), 0.1 + 0.05 * Math.sin(u), 0]; }
+        keys.push({ f, pose: tsuPose(R, Object.assign({ dy: -0.03, neckPitch: -0.1 + 0.05 * Math.sin(ph), tailYaw: 0.4 * Math.sin(ph + 1.2), legs }, { up: -0.1, fold: 0.4, sweep: -1.1 })) }); }
+      out.push({ slot: 'swim', name: '泳ぐ', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'かく' }, { f: 8, label: '逆でかく' }], keys, seg: {} } }); }
+    return { R, acts: out }; }
+  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs } };
   const cache = {};
   const kindAct = k => cache[k] || (cache[k] = KINDS[k].acts());
   function detect(S) { if (S && S.tpl && KINDS[S.tpl.kind]) return S.tpl.kind; if (!S || !S.bones) return null;
@@ -82,6 +134,6 @@ window.BoneTemplates = (() => {
   // アニメのキーを f で読む（骨だけ戻す用：間はまっすぐつなぐ）
   function sample(A, f, id) { const K = A.keys; if (!K.length) return null; let a = K[0], b = null; for (const k of K) { if (k.f <= f) a = k; else { b = k; break; } } if (!b && A.loop) b = { f: A.len, pose: K[0].pose }; const pa = a.pose[id]; if (!b || !pa) return pa ? cl(pa) : null; const pb = b.pose[id]; if (!pb || pb.length !== pa.length) return cl(pa); const t = (f - a.f) / ((b.f - a.f) || 1); return pa.map((p, i) => R4(p.map((v, k) => v + (pb[i][k] - v) * t))); }
   // お手本の骨の上でポーズを作る（野生個体の動き用。工房と同じ骨・同じポーズの作り方）
-  const poseOf = (kind, o) => kind === 'tokage' ? tokPose(kindAct('tokage').R, o) : null;
+  const poseOf = (kind, o) => kind === 'tokage' ? tokPose(kindAct('tokage').R, o) : kind === 'tsubasa' ? tsuPose(kindAct('tsubasa').R, o) : null;
   return { KINDS, detect, animFor, slots, sample, retarget, poseOf, data: k => KINDS[k] && KINDS[k].data() };
 })();
