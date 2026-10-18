@@ -10,7 +10,7 @@ const SAVE_KEY = 'yuya_anim_draft_v1'; /* アニメ工房は狩り場とは別�
 const newState = window.ProjectData.newState;
 let S = newState(); try { const sv = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (sv && sv.bones) S = sv; } catch (_) {}
 let nextId = 1;
-function migrate() { nextId = 1; for (const b of S.bones) { nextId = Math.max(nextId, b.id + 1); if (!b.wp) b.wp = clone(b.w || [{ t: 0, r: 0.04 }]); if (!b.wn) b.wn = clone(b.w || b.wp); if (!b.dp) b.dp = clone(b.d || b.wp); if (!b.dn) b.dn = clone(b.d || b.dp); if (!b.off) b.off = {}; if (!b.sides) b.sides = 8; } }
+function migrate() { if (S.tpl) delete S.tpl; /* アニメ工房は骨を自由に足せる（種族の骨固定はゲーム用） */ nextId = 1; for (const b of S.bones) { nextId = Math.max(nextId, b.id + 1); if (!b.wp) b.wp = clone(b.w || [{ t: 0, r: 0.04 }]); if (!b.wn) b.wn = clone(b.w || b.wp); if (!b.dp) b.dp = clone(b.d || b.wp); if (!b.dn) b.dn = clone(b.d || b.dp); if (!b.off) b.off = {}; if (!b.sides) b.sides = 8; } }
 const clone = o => JSON.parse(JSON.stringify(o)), undoS = [], redoS = [];
 migrate(); if (S.rest) { for (const b of S.bones) if (S.rest[b.id]) b.pts = clone(S.rest[b.id]); delete S.rest; }
 function pushUndo() { undoS.push(clone(S)); if (undoS.length > 80) undoS.shift(); redoS.length = 0; updBtns(); }
