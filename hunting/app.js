@@ -38,15 +38,21 @@ const TPL = window.BoneTemplates;
 // ============ 基本 ============
 const WORKS_KEY = window.ProjectData.keys.works, BP_KEY = window.ProjectData.keys.blueprints;
 const canvas = document.getElementById('v'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0xdfe6dc); scene.fog = new THREE.Fog(0xdfe6dc, 16, 62);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xdfe6dc); scene.fog = new THREE.Fog(0xdfe6dc, 22, 110);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x7d8a66, 1.15)); const sun = new THREE.DirectionalLight(0xfff3e0, 1.4); sun.position.set(4, 9, 5); scene.add(sun);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), new THREE.MeshStandardMaterial({ color: 0xb7c69c, roughness: 1 })); ground.rotation.x = -Math.PI / 2; scene.add(ground);
-const grid = new THREE.GridHelper(160, 80, 0xadbc93, 0xadbc93); grid.position.y = 0.002; grid.material.transparent = true; grid.material.opacity = 0.45; scene.add(grid); /* 低い視点でも速さが分かる目印 */
-const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 160);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 176), new THREE.MeshStandardMaterial({ color: 0xb7c69c, roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.position.z = -58; scene.add(ground); /* 陸（海は z<-146） */
+const grid = new THREE.GridHelper(176, 88, 0xadbc93, 0xadbc93); grid.position.set(0, 0.002, -58); grid.material.transparent = true; grid.material.opacity = 0.45; scene.add(grid); /* 低い視点でも速さが分かる目印 */
+const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 260);
 let W = 0, H = 0; function layout() { W = innerWidth; H = innerHeight; renderer.setSize(W, H, false); cam.aspect = W / H; cam.updateProjectionMatrix(); } addEventListener('resize', layout); layout(); try { new ResizeObserver(() => layout()).observe(document.documentElement); } catch (_) {}
 const msg = (() => { let t = 0; return s => { const e = document.getElementById('msg'); e.textContent = s; e.style.opacity = 1; clearTimeout(t); t = setTimeout(() => e.style.opacity = 0, 2200); }; })();
 const proj = P => { const v = P.clone().project(cam); return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, z: v.z }; };
 function pop(P, text, col, size) { const s = proj(P); if (s.z > 1) return; const e = document.createElement('div'); e.className = 'pop'; e.textContent = text; e.style.left = s.x + 'px'; e.style.top = s.y + 'px'; e.style.color = col || '#fff'; e.style.fontSize = (size || 20) + 'px'; document.body.appendChild(e); requestAnimationFrame(() => { e.style.transform = 'translate(-50%,-140%)'; e.style.opacity = 0; }); setTimeout(() => e.remove(), 750); }
+// 文字の看板（いつもカメラを向く）。size＝高さ(m)
+function label(text, o) { o = o || {}; const fs = 56, pad = 20, c = document.createElement('canvas'), x = c.getContext('2d'), font = '900 ' + fs + 'px "Hiragino Sans","Zen Kaku Gothic New",sans-serif'; x.font = font;
+  const w = Math.ceil(x.measureText(text).width) + pad * 2, h = Math.round(fs * 1.5); c.width = w; c.height = h; x.font = font;
+  x.fillStyle = o.bg || 'rgba(255,255,255,.92)'; x.fillRect(0, 0, w, h); x.fillStyle = o.col || '#2b2a27'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, h / 2 + 3);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false })); const k = o.size || 0.8; sp.scale.set(k * w / h, k, 1); return sp; }
+function dropLabel(sp) { if (!sp) return; if (sp.parent) sp.parent.remove(sp); sp.material.map.dispose(); sp.material.dispose(); }
 // ============ ボーンの体（工房と同じ計算で形を作る） ============
 const matBody = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true, side: THREE.DoubleSide });
 function prepData(d) { // 足元を地面、真ん中を原点にそろえる
@@ -116,21 +122,33 @@ const pl = { x: 0, z: 0, y: 0, yaw: Math.PI, g: new THREE.Group() }; /* 奥（-z
   pl.g.add(body, head, nose, stick); scene.add(pl.g); }
 // ============ キャンプ（拠点）：工房をひらける ============
 const CAMP = { x: 0, z: 0, r: 2.4 };
-{ const c = new THREE.Group();
+// 鳥人間の会場：海に突き出た高台（高さ h）＋桟橋。桟橋の先（edge）からの距離が飛距離
+const VENUE = { x0: -14, x1: 14, z0: -150, z1: -122, h: 9, pier: { x0: -2, x1: 2 }, edge: -157, start: { x: 0, z: -125 }, booth: { x: 7, z: -129 }, camp: { x: -7, z: -131, r: 2.2 } };
+const CAMPS = [{ x: CAMP.x, z: CAMP.z, r: CAMP.r, y: 0 }, { x: VENUE.camp.x, z: VENUE.camp.z, r: VENUE.camp.r, y: VENUE.h }];
+for (const C of CAMPS) { const c = new THREE.Group(), CAMP = C;
   const ring = new THREE.Mesh(new THREE.RingGeometry(CAMP.r - 0.08, CAMP.r, 48), new THREE.MeshBasicMaterial({ color: 0xd9572b, transparent: true, opacity: 0.55, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; c.add(ring);
   const floor = new THREE.Mesh(new THREE.CircleGeometry(CAMP.r - 0.08, 48), new THREE.MeshBasicMaterial({ color: 0xe9d9b0, transparent: true, opacity: 0.35, depthWrite: false })); floor.rotation.x = -Math.PI / 2; floor.position.y = 0.02; c.add(floor);
   const tent = new THREE.Mesh(new THREE.ConeGeometry(0.75, 1.1, 4), new THREE.MeshStandardMaterial({ color: 0xd9572b, flatShading: true })); tent.position.set(-1.1, 0.55, -1.1); tent.rotation.y = Math.PI / 4; c.add(tent);
   const fire = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), new THREE.MeshStandardMaterial({ color: 0xffb03a, emissive: 0xff7a1a, emissiveIntensity: 0.9, flatShading: true })); fire.position.set(0.9, 0.18, -0.9); c.add(fire);
-  c.position.set(CAMP.x, 0, CAMP.z); scene.add(c); }
-const inCamp = (x, z) => Math.hypot(x - CAMP.x, z - CAMP.z) < CAMP.r;
-function openTool() { if (!inCamp(pl.x, pl.z) || pl.y > 0.5) return; clearMovementInput(); try { window.parent.__openTool && window.parent.__openTool(); } catch (_) {} }
+  c.position.set(CAMP.x, CAMP.y, CAMP.z); scene.add(c); }
+const inCamp = (x, z, y) => CAMPS.some(c => Math.hypot(x - c.x, z - c.z) < c.r && Math.abs((y == null ? c.y : y) - c.y) < 0.5);
+function openTool() { if (!inCamp(pl.x, pl.z, pl.y)) return; clearMovementInput(); try { window.parent.__openTool && window.parent.__openTool(); } catch (_) {} }
 document.getElementById('campBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; openTool(); });
 // ============ 地形 ============
 // 奥（-z）へ進む。右に一本道の草原、左にごちゃごちゃの森、真ん中に段々の高台、右奥に池と高い柱、奥の崖の向こうに盆地。
-const MAP = { x0: -32, x1: 32, z0: -82, z1: 16, cliffZ0: -58, cliffZ1: -55, cliffH: 3.2,
+// 南（+z）がスタート。草原と森 → 崖（門・穴）→ 盆地 → 砂浜 → 海（z<sea）。崖の上の高台が鳥人間の会場
+const MAP = { x0: -60, x1: 60, z0: -470, z1: 16, sea: -146, coast: -100, cliffZ0: -58, cliffZ1: -55, cliffH: 3.2,
   gate: { x0: 6.5, x1: 9.5 }, hole: { x0: -14.6, x1: -13.4, h: 0.66 }, rockNeed: 1.96,
   pond: { x0: 14, x1: 25, z0: -33, z1: -17, surf: 0.42 }, garden: { x0: -3, x1: 5, z0: -23, z1: -9 } };
 const STEP = 0.3; // これ以下の段差は歩いて上がれる
+const ROAD = [[[8, -58], [8, -96], [12, -104], [15.75, -111]]];
+const TRAILS = [[[-4, -6], [-12, -14], [-22, -20], [-30, -30], [-24, -42], [-14, -50], [-14, -54.5]], [[-22, -20], [-36, -16], [-48, -24], [-52, -40]], [[-30, -30], [-42, -36], [-40, -50]]];
+const CLEARINGS = [[-48, -24, 5], [-30, -30, 4]];
+function segD(x, z, a, b) { const dx = b[0] - a[0], dz = b[1] - a[1], L = dx * dx + dz * dz || 1e-9, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L)); return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t); }
+function lineD(x, z, L) { let d = 1e9; for (const p of L) for (let i = 1; i < p.length; i++) d = Math.min(d, segD(x, z, p[i - 1], p[i])); return d; }
+function strip(p, w, color, y) { const mat = new THREE.MeshStandardMaterial({ color, roughness: 1 });
+  for (let i = 1; i < p.length; i++) { const a = p[i - 1], b = p[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), m = new THREE.Mesh(new THREE.PlaneGeometry(w, L), mat); m.rotation.set(-Math.PI / 2, 0, Math.atan2(-(b[0] - a[0]), -(b[1] - a[1]))); m.position.set((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2); scene.add(m); }
+  for (const q of p) { const d = new THREE.Mesh(new THREE.CircleGeometry(w / 2, 14), mat); d.rotation.x = -Math.PI / 2; d.position.set(q[0], y, q[1]); scene.add(d); } }
 const boxes = [], circles = [];
 const matRock = new THREE.MeshStandardMaterial({ color: 0x9a9284, flatShading: true, roughness: 1 }), matLedge = new THREE.MeshStandardMaterial({ color: 0xb2a48a, flatShading: true, roughness: 1 });
 // top＝上に乗れる高さ（stand:false なら乗れない）。h＝見た目の高さ
@@ -139,8 +157,9 @@ function addBox(x0, x1, z0, z1, h, opt) { const w = Object.assign({ x0, x1, z0, 
 function flat(x0, x1, z0, z1, color, y, opt) { const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 1 }, opt || {}))); m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); scene.add(m); return m; }
 { const H = MAP.cliffH, a = MAP.cliffZ0, b = MAP.cliffZ1;
   // 外周（見えない高さまで壁）
-  addBox(MAP.x0 - 3, MAP.x0, MAP.z0 - 3, MAP.z1 + 3, H, { top: 99, stand: false }); addBox(MAP.x1, MAP.x1 + 3, MAP.z0 - 3, MAP.z1 + 3, H, { top: 99, stand: false });
-  addBox(MAP.x0, MAP.x1, MAP.z1, MAP.z1 + 3, 1.2, { top: 99, stand: false }); addBox(MAP.x0, MAP.x1, MAP.z0 - 3, MAP.z0, H, { top: 99, stand: false });
+  addBox(MAP.x0 - 3, MAP.x0, MAP.sea, MAP.z1 + 3, H, { top: 99, stand: false }); addBox(MAP.x1, MAP.x1 + 3, MAP.sea, MAP.z1 + 3, H, { top: 99, stand: false });
+  addBox(MAP.x0 - 3, MAP.x0, MAP.z0 - 3, MAP.sea, H, { top: 99, stand: false, noMesh: true }); addBox(MAP.x1, MAP.x1 + 3, MAP.z0 - 3, MAP.sea, H, { top: 99, stand: false, noMesh: true }); /* 海の上は見えない壁 */
+  addBox(MAP.x0, MAP.x1, MAP.z1, MAP.z1 + 3, 1.2, { top: 99, stand: false }); addBox(MAP.x0, MAP.x1, MAP.z0 - 3, MAP.z0, H, { top: 99, stand: false, noMesh: true });
   // 崖（上には乗れる＝飛べば越えられる）。すき間は岩の門と低い穴
   addBox(MAP.x0, MAP.hole.x0, a, b, H); addBox(MAP.hole.x1, MAP.gate.x0, a, b, H); addBox(MAP.gate.x1, MAP.x1, a, b, H);
   const hh = MAP.hole.h; addBox(MAP.hole.x0, MAP.hole.x1, a, b, H, { noMesh: true, stand: true, gate: (body, o) => body.h <= hh && body.r <= 0.55 && o.y < 0.2, name: 'hole' });
@@ -155,19 +174,39 @@ function flat(x0, x1, z0, z1, color, y, opt) { const m = new THREE.Mesh(new THRE
   // 池（入ると泳ぐ）
   const P = MAP.pond; flat(P.x0, P.x1, P.z0, P.z1, 0x8a9a7a, 0.004); MAP.water = flat(P.x0, P.x1, P.z0, P.z1, 0x5aa6c9, P.surf, { transparent: true, opacity: 0.78, roughness: 0.3 });
   // 道・森・盆地の床
-  flat(6, 10, -55, 1.5, 0xcbb88c, 0.004); flat(-30, -3, -54, -5, 0x9db07f, 0.003); flat(MAP.x0, MAP.x1, MAP.z0, a, 0xaebd8e, 0.003);
+  flat(6, 10, -55, 1.5, 0xcbb88c, 0.004); flat(-58, -3, -54, -5, 0x9db07f, 0.003); flat(MAP.x0, MAP.x1, MAP.coast, a, 0xaebd8e, 0.003);
+  flat(MAP.x0 - 3, MAP.x1 + 3, MAP.sea, MAP.coast, 0xe3d3a4, 0.003); // 砂浜
+  flat(-240, 240, -560, MAP.sea, 0x5f877f, -0.01); MAP.seaM = flat(-240, 240, -560, MAP.sea, 0x4a9cc4, 0.42, { transparent: true, opacity: 0.84, roughness: 0.25 }); // 海（入ると泳ぐ）
+  // 道（崖の門から海辺の石段まで）と森の獣道
+  for (const p of ROAD) strip(p, 3.2, 0xcbb88c, 0.005); for (const p of TRAILS) strip(p, 1.9, 0xb9a77c, 0.006);
 }
+// ---- 鳥人間の会場：海に突き出た高台・桟橋・石段・受付・工房テント ----
+{ const V = VENUE, matCliff = new THREE.MeshStandardMaterial({ color: 0xa8957a, flatShading: true, roughness: 1 }), matWood = new THREE.MeshStandardMaterial({ color: 0x9a7650, flatShading: true, roughness: 1 });
+  addBox(V.x0, V.x1, V.z0, V.z1, V.h, { mat: matCliff });
+  addBox(V.pier.x0, V.pier.x1, V.edge, V.z0, V.h, { mat: matWood });
+  for (let i = 1; i <= 36; i++) addBox(14, 17.5, -112 - i, -111 - i, 0.25 * i, { mat: matLedge }); // 石段（1段0.25m）
+  flat(-1.6, 1.6, V.z0, V.start.z + 0.6, 0xefe6d0, V.h + 0.01); flat(V.pier.x0 + 0.25, V.pier.x1 - 0.25, V.edge, V.z0, 0xd8c39a, V.h + 0.01); // 助走路
+  flat(-2.2, 2.2, V.start.z - 0.15, V.start.z + 0.15, 0xd9572b, V.h + 0.02); flat(V.pier.x0, V.pier.x1, V.edge, V.edge + 0.3, 0xd9572b, V.h + 0.02); // スタート線と踏み切り線
+  for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6), matBody(0x7a5a3a)); post.position.set(V.booth.x + sx * 1.1, V.h + 1.3, V.booth.z); scene.add(post); }
+  const desk = new THREE.Mesh(new THREE.BoxGeometry(2, 0.9, 0.7), matWood); desk.position.set(V.booth.x, V.h + 0.45, V.booth.z); scene.add(desk);
+  const banner = label('鳥人間 受付', { size: 0.75, bg: '#2b8bb8', col: '#fff' }); banner.position.set(V.booth.x, V.h + 2.9, V.booth.z); scene.add(banner);
+  const sign = label('↑ 鳥人間の会場', { size: 0.8, bg: '#2b8bb8', col: '#fff' }); sign.position.set(15.75, 2.4, -108); scene.add(sign);
+  for (let d = 25; d <= 300; d += 25) for (const sx of [-1, 1]) { const by = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.9, 8), new THREE.MeshStandardMaterial({ color: d % 100 ? 0xf3ead8 : 0xd9572b, flatShading: true })); by.position.set(sx * 12, 0.5, V.edge - d); scene.add(by);
+    if (sx > 0) { const t = label(d + 'm', { size: 0.9 }); t.position.set(sx * 12, 1.8, V.edge - d); scene.add(t); } } }
 const inPond = (x, z) => x > MAP.pond.x0 && x < MAP.pond.x1 && z > MAP.pond.z0 && z < MAP.pond.z1;
+const inWater = (x, z) => inPond(x, z) || z < MAP.sea;
 // 押せる岩（門をふさいでいる）
 const boulder = { x: (MAP.gate.x0 + MAP.gate.x1) / 2, z: (MAP.cliffZ0 + MAP.cliffZ1) / 2 + 0.6, r: 1.35, top: 2.4, moved: false };
 boulder.m = new THREE.Mesh(new THREE.DodecahedronGeometry(boulder.r, 1), new THREE.MeshStandardMaterial({ color: 0x8c857a, flatShading: true, roughness: 1 })); boulder.m.position.set(boulder.x, boulder.r * 0.92, boulder.z); scene.add(boulder.m);
 // 木（幹は乗れない、葉っぱの上は飛んで越える）・岩（乗れる）・草むら
-{ const rnd = (() => { let t = 12345; return () => (t = (t * 16807) % 2147483647) / 2147483647; })(), G = MAP.garden;
-  const ok = (x, z) => Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.r + 1.5 && Math.hypot(x - (MAP.hole.x0 + MAP.hole.x1) / 2, z - MAP.cliffZ1) > 3.2 && !(x > G.x0 - 1 && x < G.x1 + 1 && z > G.z0 - 1 && z < G.z1 + 1) && !(x > MAP.pond.x0 - 1.5 && x < MAP.pond.x1 + 1.5 && z > MAP.pond.z0 - 1.5 && z < MAP.pond.z1 + 1.5) && Math.hypot(x - 19.25, z + 43.75) > 3;
-  const T = [], Rk = [];
-  for (let x = -29; x <= -3; x += 2.05) for (let z = -53; z <= -6; z += 2.05) { const tx = x + (rnd() - 0.5) * 1.1, tz = z + (rnd() - 0.5) * 1.1; if (ok(tx, tz) && rnd() > 0.06) T.push({ x: tx, z: tz, r: 0.22 + rnd() * 0.1, h: 3.2 + rnd() * 1.6 }); }
-  for (let i = 0; i < 70; i++) { const x = -1 + rnd() * 30, z = -52 + rnd() * 64; if (x > 4.5 && x < 11.5) continue; if (!ok(x, z)) continue; if (rnd() < 0.4) T.push({ x, z, r: 0.25 + rnd() * 0.1, h: 3.4 + rnd() * 1.6 }); else Rk.push({ x, z, r: 0.35 + rnd() * 0.5 }); }
-  for (let i = 0; i < 26; i++) { const x = -28 + rnd() * 56, z = -80 + rnd() * 20; if (Math.hypot(x, z + 69) < 12.5 || Math.hypot(x + 18, z + 75) < 4) continue; T.push({ x, z, r: 0.25 + rnd() * 0.1, h: 3.6 + rnd() * 1.4 }); }
+{ const rnd = (() => { let t = 12345; return () => (t = (t * 16807) % 2147483647) / 2147483647; })(), G = MAP.garden, V = VENUE;
+  const ok = (x, z) => Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.r + 1.5 && Math.hypot(x - (MAP.hole.x0 + MAP.hole.x1) / 2, z - MAP.cliffZ1) > 3.2 && !(x > G.x0 - 1 && x < G.x1 + 1 && z > G.z0 - 1 && z < G.z1 + 1) && !(x > MAP.pond.x0 - 1.5 && x < MAP.pond.x1 + 1.5 && z > MAP.pond.z0 - 1.5 && z < MAP.pond.z1 + 1.5) && Math.hypot(x - 19.25, z + 43.75) > 3
+    && lineD(x, z, ROAD) > 3 && !(x > V.x0 - 3 && x < 21 && z < -104) && z > MAP.sea + 2 && !(z < MAP.cliffZ0 + 1.5 && z > MAP.cliffZ1 - 1.5);
+  const T = [], Rk = [], clear = (x, z) => CLEARINGS.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r);
+  for (let x = -57; x <= -3; x += 2.45) for (let z = -53; z <= -6; z += 2.45) { const tx = x + (rnd() - 0.5) * 1.3, tz = z + (rnd() - 0.5) * 1.3; if (ok(tx, tz) && lineD(tx, tz, TRAILS) > 2.1 && !clear(tx, tz) && rnd() > 0.08) T.push({ x: tx, z: tz, r: 0.22 + rnd() * 0.1, h: 3.2 + rnd() * 1.6 }); } // 森（獣道と広場はあける）
+  for (let i = 0; i < 150; i++) { const x = -1 + rnd() * 58, z = -52 + rnd() * 64; if (x > 4.5 && x < 11.5) continue; if (!ok(x, z)) continue; if (rnd() < 0.4) T.push({ x, z, r: 0.25 + rnd() * 0.1, h: 3.4 + rnd() * 1.6 }); else Rk.push({ x, z, r: 0.35 + rnd() * 0.5 }); } // 右の草原
+  for (let i = 0; i < 80; i++) { const x = -57 + rnd() * 114, z = -99 + rnd() * 40; if (Math.hypot(x, z + 68.5) < 12.5 || Math.hypot(x + 18, z + 75) < 4 || !ok(x, z)) continue; T.push({ x, z, r: 0.25 + rnd() * 0.1, h: 3.6 + rnd() * 1.4 }); } // 盆地
+  for (let i = 0; i < 40; i++) { const x = -57 + rnd() * 114, z = -143 + rnd() * 42; if (!ok(x, z)) continue; if (rnd() < 0.25) T.push({ x, z, r: 0.2 + rnd() * 0.08, h: 3 + rnd() * 1.2 }); else Rk.push({ x, z, r: 0.3 + rnd() * 0.6 }); } // 砂浜
   for (const t of T) circles.push({ x: t.x, z: t.z, r: t.r, top: t.h + 1.4, stand: false });
   for (const t of Rk) circles.push({ x: t.x, z: t.z, r: t.r, top: t.r * 0.85, stand: true });
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
@@ -178,12 +217,12 @@ boulder.m = new THREE.Mesh(new THREE.DodecahedronGeometry(boulder.r, 1), new THR
   scene.add(trunk, crown); MAP.crown = crown; MAP.trunk = trunk; MAP.crownTrees = T;
   const rock = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), matRock, Rk.length);
   Rk.forEach((t, i) => { M.compose(new THREE.Vector3(t.x, t.r * 0.45, t.z), q.setFromEuler(e.set(rnd(), rnd(), 0)), new THREE.Vector3(t.r, t.r, t.r)); rock.setMatrixAt(i, M); }); scene.add(rock);
-  const tuftN = 700, tuft = new THREE.InstancedMesh(new THREE.ConeGeometry(0.07, 0.28, 4), new THREE.MeshStandardMaterial({ color: 0x8fa66e, flatShading: true }), tuftN);
-  for (let i = 0; i < tuftN; i++) { let x, z; do { x = MAP.x0 + rnd() * (MAP.x1 - MAP.x0); z = MAP.z0 + rnd() * (MAP.z1 - MAP.z0); } while (inPond(x, z)); M.compose(new THREE.Vector3(x, 0.12, z), q.identity(), new THREE.Vector3(1, 0.6 + rnd(), 1)); tuft.setMatrixAt(i, M); } scene.add(tuft); }
+  const tuftN = 1500, tuft = new THREE.InstancedMesh(new THREE.ConeGeometry(0.07, 0.28, 4), new THREE.MeshStandardMaterial({ color: 0x8fa66e, flatShading: true }), tuftN);
+  for (let i = 0; i < tuftN; i++) { let x, z; do { x = MAP.x0 + rnd() * (MAP.x1 - MAP.x0); z = MAP.coast + rnd() * (MAP.z1 - MAP.coast); } while (inWater(x, z)); M.compose(new THREE.Vector3(x, 0.12, z), q.identity(), new THREE.Vector3(1, 0.6 + rnd(), 1)); tuft.setMatrixAt(i, M); } scene.add(tuft); }
 // カメラと乗り手の間にある木は隠す（低い視点で森に入っても見える）
 const hiddenCrown = new Set(), zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
 function updateCrowns(cx, cz, px, pz, py) { const sx = px - cx, sz = pz - cz, L2 = sx * sx + sz * sz || 1e-9; let changed = false;
-  for (const t of MAP.crownTrees) { const u = ((t.x - cx) * sx + (t.z - cz) * sz) / L2, off = Math.hypot(cx + sx * u - t.x, cz + sz * u - t.z), hide = u > -0.1 && u < 0.97 && off < 2.1 && py < t.h + 2;
+  for (const t of MAP.crownTrees) { const u = ((t.x - cx) * sx + (t.z - cz) * sz) / L2, off = Math.hypot(cx + sx * u - t.x, cz + sz * u - t.z), hide = py < t.h + 2 && (u > -0.1 && u < 0.97 && off < 3 || Math.hypot(t.x - cx, t.z - cz) < 6.5); /* カメラのすぐ横の木も隠す（森で視界がふさがらんように） */
     if (hide !== hiddenCrown.has(t)) { changed = true; if (hide) { hiddenCrown.add(t); MAP.crown.setMatrixAt(t.ci, zeroM); MAP.trunk.setMatrixAt(t.ci, zeroM); } else { hiddenCrown.delete(t); MAP.crown.setMatrixAt(t.ci, t.crownM); MAP.trunk.setMatrixAt(t.ci, t.trunkM); } } }
   if (changed) { MAP.crown.instanceMatrix.needsUpdate = true; MAP.trunk.instanceMatrix.needsUpdate = true; } }
 // カメラが崖や柱の中に埋まらないよう、乗り手からカメラへの線が当たったら上からのぞくか手前に寄せる
@@ -248,12 +287,17 @@ function readMarks(body, A, kind) { if (!A || !A.len) return null; S = body.D; S
   return { hold, takeoff: tk, upV: up * 24, down: dn, downV: dv * 24 }; }
 // ============ 野生の子（暮らしてるだけ。Eで調べると設計図） ============
 const wilds = [];
-function wildOf(kind, x, z, opt) { const d = TPL.data(kind), body = new BoneBody(d, kind === 'tsubasa' ? 0x6d93b8 : 0x8aa05a), w = Object.assign({ kind, name: TPL.KINDS[kind].name, body, x, z, y: 0, yaw: Math.random() * 6.28, t: Math.random() * 9, ph: 0, A: animsFor(d), mode: 'wander' }, opt || {}); wilds.push(w); return w; }
+function wildOf(kind, x, z, opt) { const d = TPL.data(kind), body = new BoneBody(d, kind === 'tsubasa' ? 0x6d93b8 : kind === 'hebi' ? 0x3f8f96 : 0x8aa05a), w = Object.assign({ kind, name: TPL.KINDS[kind].name, body, x, z, y: 0, yaw: Math.random() * 6.28, t: Math.random() * 9, ph: 0, A: animsFor(d), mode: 'wander' }, opt || {}); wilds.push(w); return w; }
 wildOf('tokage', 5, 8); wildOf('tokage', -6, 6); wildOf('tsubasa', -4, -5);
 const flyer = wildOf('tsubasa', 19, -40, { mode: 'circle', cx: 19.25, cz: -43.75, R: 7, y: 7.5, look: false }); flyer.body.g.scale.setScalar(1.3);
+for (const [x, z, R] of [[-6, -183, 6], [9, -226, 5], [-14, -165, 4]]) wildOf('hebi', x, z, { mode: 'swim', cx: x, cz: z, R, name: 'ウミヘビ' });
 function stepWild(w, dt) { w.t += dt;
   if (w.mode === 'circle') { const sp = 4.2; w.th = (w.th || 0) + sp / w.R * dt; w.x = w.cx + Math.cos(w.th) * w.R; w.z = w.cz + Math.sin(w.th) * w.R; w.yaw = Math.atan2(-Math.sin(w.th), Math.cos(w.th));
     w.y = 7.5 + Math.sin(w.t * 0.7) * 1.2; const flap = Math.sin(w.t * 0.5) > 0.6, A = flap ? w.A.flap : w.A.glide; if (A) { w.ph = (w.ph + dt * 24 / A.len) % 1; bodyFrame(w.body, A, w.ph * A.len); } }
+  else if (w.mode === 'swim') { const near = Math.hypot(pl.x - w.x, pl.z - w.z) < 4.5 && pl.y < 1.5;
+    if (near) w.yaw = turnTo(w.yaw, Math.atan2(pl.x - w.x, pl.z - w.z), dt * 3); /* 目が合う */
+    else { w.th = (w.th == null ? Math.random() * 6.28 : w.th) + 0.9 / w.R * dt; const tx = w.cx + Math.cos(w.th) * w.R, tz = w.cz + Math.sin(w.th) * w.R; w.yaw = turnTo(w.yaw, Math.atan2(tx - w.x, tz - w.z), dt * 2); w.x += (tx - w.x) * Math.min(1, dt * 2); w.z += (tz - w.z) * Math.min(1, dt * 2); }
+    w.y = 0.3 + Math.sin(w.t * 1.3) * 0.03; const A = near ? (w.A.idle || w.A.walk) : (w.A.walk || w.A.idle); if (A) { w.ph = (w.ph + dt * 24 / A.len * (near ? 0.6 : 1)) % 1; bodyFrame(w.body, A, w.ph * A.len); } }
   else { const near = Math.hypot(pl.x - w.x, pl.z - w.z) < 3; let sp = 0;
     if (!near && Math.sin(w.t * 0.6) > 0.2) { sp = 0.55; w.x += Math.sin(w.yaw) * sp * dt; w.z += Math.cos(w.yaw) * sp * dt; }
     if (near) w.yaw = turnTo(w.yaw, Math.atan2(pl.x - w.x, pl.z - w.z), dt * 3); else if (Math.random() < 0.006) w.yaw += (Math.random() - 0.5) * 2;
@@ -270,7 +314,7 @@ const hasBlueprint = kind => loadWorks().some(w => TPL.detect(w.data) === kind);
 function nearWild() { let best = null, bd = 2.4; for (const w of wilds) { if (w.mode === 'circle') continue; const d = Math.hypot(w.x - pl.x, w.z - pl.z); if (d < bd) { bd = d; best = w; } } return best; }
 function lookAt() { const w = nearWild(); if (!w) return;
   if (hasBlueprint(w.kind)) { msg(w.name + '：もう設計図はある。工房の「作品」にあるで'); return; }
-  const work = makeBlueprint(w.kind); msg(w.name + 'を調べた！ 設計図を手に入れた（工房の「作品」）'); if (!mate) setMate(work); }
+  const work = makeBlueprint(w.kind); msg(w.name + 'を調べた！ ' + TPL.KINDS[w.kind].name + 'の設計図を手に入れた（工房の「作品」）'); if (!mate) setMate(work); }
 document.getElementById('lookBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; lookAt(); });
 // ============ すげ！枠：同じ骨・同じ作り方で、造形とアニメが違う野生個体（盆地を周回） ============
 const rival = (() => { try {
@@ -356,7 +400,8 @@ addEventListener('blur', clearMovementInput);
 addEventListener('pagehide', clearMovementInput);
 document.addEventListener('visibilitychange', () => { if (document.hidden) clearMovementInput(); });
 addEventListener('keydown', e => { if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; const k = e.key.toLowerCase(); keys.add(k); if (!document.body.classList.contains('pc')) document.body.classList.add('pc');
-  if (k === 'e') { if (inCamp(pl.x, pl.z)) openTool(); else lookAt(); }
+  if (k === 'e') { if (BIRD.near()) BIRD.start(); else if (inCamp(pl.x, pl.z, pl.y)) openTool(); else lookAt(); }
+  if (k === 'r') BIRD.again();
   if (k === ' ') { e.preventDefault(); if (!e.repeat) spaceDown(); } });
 addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') spaceUp(); });
 addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') document.body.classList.add('pc'); }, true);
@@ -379,7 +424,7 @@ function stepMate(dt, mx, mz, ml, moving, walking) { const m = mate, T = window.
     if (m.f >= A.jump.len) { if (!m.lifted) { m.vy = T.jumpV * m.jumpK; m.y += 0.02; m.lifted = true; } m.st = 'air'; m.airT = 0; }
     if (m.lifted && pressed && m.canFly) { m.st = 'flap'; m.f = 0; m.flapped = false; } }
   else if (m.st === 'air') { m.airT += dt; if (m.canFly && pressed) { m.st = 'flap'; m.f = 0; m.flapped = false; } else if (m.canFly && spaceHeld && m.vy < 0.6) m.st = 'glide'; }
-  else if (m.st === 'flap') { const prev = playOnce(dt, A.flap); if (!m.flapped && prev < m.fm.down && m.f >= m.fm.down) { m.vy = Math.max(m.vy, 0) * 0.35 + T.flapV * m.flapK; m.flapped = true; }
+  else if (m.st === 'flap') { const prev = playOnce(dt, A.flap); if (!m.flapped && prev < m.fm.down && m.f >= m.fm.down) { m.vy = Math.max(m.vy, 0) * 0.35 + T.flapV * m.flapK * BIRD.flap(m); m.flapped = true; }
     if (pressed && m.flapped) { m.f = 0; m.flapped = false; } /* 連打：打ち下ろしの後なら次の羽ばたきへ */
     else if (m.f >= A.flap.len) { m.st = spaceHeld && A.glide ? 'glide' : 'air'; m.airT = 0; } }
   else if (m.st === 'glide') { if (pressed) { m.st = 'flap'; m.f = 0; m.flapped = false; } else if (!spaceHeld) { m.st = 'air'; m.airT = 0; } }
@@ -398,10 +443,10 @@ function stepMate(dt, mx, mz, ml, moving, walking) { const m = mate, T = window.
   collide(m, m.info.r, m.info, bump); holeHint(m, m.info);
   // ---- 縦の動き ----
   const g0 = groundAt(m.x, m.z, m.y);
-  if (inAir) { const vy0 = m.vy; m.vy -= T.gravity * dt; if (m.st === 'glide') m.vy = Math.max(m.vy, -T.glideSink); m.y += m.vy * dt;
-    if (m.vy < 0 && m.y <= g0) { m.y = g0; m.vy = 0; const hard = -vy0 > 3.5; m.lifted = false; m.st = hard && A.land ? 'land' : (inPond(m.x, m.z) && g0 < 0.05 ? 'swim' : 'ground'); m.f = 0; } }
+  if (inAir) { const vy0 = m.vy; m.vy -= T.gravity * dt; const up = liftAt(m.x, m.z, m.y); if (up) m.vy = Math.min(m.vy + (T.gravity + up) * dt, Math.max(vy0, UP_MAX)); if (m.st === 'glide') m.vy = Math.max(m.vy, -T.glideSink); m.y += m.vy * dt;
+    if (m.vy < 0 && m.y <= g0) { m.y = g0; m.vy = 0; const hard = -vy0 > 3.5; m.lifted = false; m.st = hard && A.land ? 'land' : (inWater(m.x, m.z) && g0 < 0.05 ? 'swim' : 'ground'); m.f = 0; } }
   else if (m.st !== 'takeoff' || !m.lifted) { if (g0 < m.y - 0.05 && m.st !== 'charge') { m.st = 'air'; m.vy = 0; m.lifted = true; m.airT = 0; } else m.y = g0;
-    if (m.st === 'ground' && inPond(m.x, m.z) && m.y < 0.05) m.st = 'swim'; else if (m.st === 'swim' && !(inPond(m.x, m.z) && m.y < 0.05)) m.st = 'ground'; }
+    if ((m.st === 'ground' || m.st === 'land') && inWater(m.x, m.z) && m.y < 0.05 && (m.st === 'ground' || m.f >= (A.land ? A.land.len : 0))) m.st = 'swim'; else if (m.st === 'swim' && !(inWater(m.x, m.z) && m.y < 0.05)) m.st = 'ground'; }
   // ---- 見た目（その時のアニメのコマ） ----
   const sp = m.v / m.size;
   if (m.st === 'ground') { const G = walking && A.walk ? { A: A.walk, cyc: Math.min(sp / 0.6, 2.4) } : gait(sp, A.walk, A.run);
@@ -441,9 +486,10 @@ function step(now) {
   pl.g.rotation.y = pl.yaw;
   for (const w of wilds) stepWild(w, dt);
   stepRival(dt);
+  BIRD.tick(dt);
   { const g = groundAt(pl.x, pl.z, pl.y + 0.01), h = Math.max(0, pl.y - g), s = (mate ? mate.info.r * 2.2 : 0.7); shadow.position.set(pl.x, g + 0.03, pl.z); shadow.scale.setScalar(s * (1 + h * 0.08)); shadow.material.opacity = Math.max(0.05, 0.25 - h * 0.025); shadow.visible = !(mate && mate.st === 'swim'); }
   // ボタン：キャンプ＝工房、野生の子の近く＝調べる
-  { const c = inCamp(pl.x, pl.z) && pl.y < 0.5, nw = !c && pl.y < 0.6 && nearWild(); document.getElementById('campBtn').style.display = c ? 'block' : 'none'; const lb = document.getElementById('lookBtn'); lb.style.display = nw ? 'block' : 'none'; if (nw) lb.firstChild.textContent = '🔍 ' + nw.name + 'を調べる'; }
+  { const c = inCamp(pl.x, pl.z, pl.y), bn = !c && BIRD.near(), nw = !c && !bn && pl.y < 0.6 && nearWild(); document.getElementById('campBtn').style.display = c ? 'block' : 'none'; document.getElementById('birdBtn').style.display = bn ? 'block' : 'none'; const lb = document.getElementById('lookBtn'); lb.style.display = nw ? 'block' : 'none'; if (nw) lb.firstChild.textContent = '🔍 ' + nw.name + 'を調べる'; }
   // カメラ：乗り手の後ろ斜め上・低め。大きい子ほど高く引き、小さい子ほど地面すれすれに寄る。高さにも付いていく
   { const T = window.BodyMotion.load(), k = Math.max(1, 1.25 / Math.max(0.45, W / H)), want = mate ? Math.pow(mate.size, 0.75) : 0.85;
     camS = camS == null ? want : camS + (want - camS) * (1 - Math.exp(-dt * 3)); const c = camS, a = 1 - Math.exp(-dt * 7), yy = pl.y;
@@ -453,6 +499,66 @@ function step(now) {
     if (!camEye) camEye = eye.clone(); else camEye.lerp(eye, 1 - Math.exp(-dt * 5));
     cam.position.copy(camEye); cam.lookAt(camLook); updateCrowns(camEye.x, camEye.z, pl.x, pl.z, pl.y); }
   renderer.render(scene, cam); }
+// ============ 鳥人間：桟橋の先から海へ。羽ばたき＝スタミナ、気流と滑空はタダ、輪っかで回復 ============
+const UP_MAX = 3.4; // 気流でのぼる速さの上限(m/s)
+const UPDRAFTS = [{ x: 0, z: -172, r: 2.8, top: 14 }, { x: -7, z: -199, r: 2.6, top: 12.5 }, { x: 7, z: -228, r: 2.6, top: 12 }, { x: -3, z: -260, r: 2.4, top: 10.5 }, { x: 5, z: -297, r: 2.4, top: 9.5 }];
+function liftAt(x, z, y) { for (const u of UPDRAFTS) if (y < u.top && Math.hypot(x - u.x, z - u.z) < u.r) return 9 * Math.min(1, (u.top - y) / 2); return 0; }
+const BIRD = (() => {
+  const KEY = 'yuya_birdman_best_v1', MAXS = 100, RINGS = [[0, 7.6, -168], [3.5, 9.6, -189], [-6, 6.6, -213], [6.5, 8.4, -241], [-2, 6, -273], [2.5, 5.5, -313]];
+  const hud = document.getElementById('bird'), res = document.getElementById('birdRes');
+  let st = 'off', stam = MAXS, dist = 0, who = null, landAt = null, bestNow = 0, bestSp = null;
+  // 気流（白い柱＋のぼる輪）と輪っか
+  const wisps = [];
+  for (const u of UPDRAFTS) { const col = new THREE.Mesh(new THREE.CylinderGeometry(u.r, u.r, u.top, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide })); col.position.set(u.x, u.top / 2, u.z); scene.add(col);
+    for (let i = 0; i < 3; i++) { const w = new THREE.Mesh(new THREE.TorusGeometry(u.r * 0.75, 0.05, 6, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false })); w.rotation.x = Math.PI / 2; w.userData = { u, ph: i / 3 }; scene.add(w); wisps.push(w); } }
+  const rings = RINGS.map(([x, y, z]) => { const m = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.13, 8, 32), new THREE.MeshStandardMaterial({ color: 0xf2c14e, emissive: 0xc98a12, emissiveIntensity: 0.5, flatShading: true, transparent: true })); m.position.set(x, y, z); scene.add(m); return { x, y, z, m, used: false }; });
+  const resetRings = () => { for (const r of rings) { r.used = false; r.m.material.opacity = 1; r.m.scale.setScalar(1); } };
+  // ベストの旗（この子のベストの位置に立つ。海を横切る線つき）
+  const flag = new THREE.Group(); { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4, 6), matBody(0xffffff)); pole.position.set(-13.5, 2.2, 0); const buoy = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.7, 10), new THREE.MeshStandardMaterial({ color: 0xd9572b, flatShading: true })); buoy.position.set(-13.5, 0.45, 0);
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), new THREE.MeshStandardMaterial({ color: 0xd9572b, side: THREE.DoubleSide })); cloth.position.set(-12.88, 3.8, 0); const line = new THREE.Mesh(new THREE.PlaneGeometry(26, 0.22), new THREE.MeshBasicMaterial({ color: 0xd9572b, transparent: true, opacity: 0.8, depthWrite: false })); line.rotation.x = -Math.PI / 2; line.position.y = 0.45; flag.add(pole, buoy, cloth, line); }
+  flag.visible = false; scene.add(flag);
+  const splash = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.9, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })); splash.rotation.x = -Math.PI / 2; scene.add(splash); let splashT = 9;
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { return {}; } };
+  const bestOf = () => { const B = load(); return mate && B.w && B.w[mate.work.id] || 0; };
+  function save(d) { const B = load(); B.w = B.w || {}; const id = mate.work.id, nb = d > (B.w[id] || 0) + 0.05; if (nb) B.w[id] = d; if (!B.all || d > B.all.d) B.all = { d, name: mate.work.name }; try { localStorage.setItem(KEY, JSON.stringify(B)); } catch (_) {} return nb; }
+  function placeBest() { bestNow = bestOf(); flag.visible = bestNow > 0.5; dropLabel(bestSp); bestSp = null; if (!flag.visible) return; flag.position.set(0, 0, VENUE.edge - bestNow); bestSp = label('ベスト ' + bestNow.toFixed(1) + 'm', { size: 0.8, bg: '#d9572b', col: '#fff' }); bestSp.position.set(-13.5, 5, 0); flag.add(bestSp); }
+  const cost = () => 12 * Math.pow(mate ? mate.size : 1, 1.3); // 体が大きいほど1回が重い
+  const air = m => m.st === 'air' || m.st === 'flap' || m.st === 'glide' || m.st === 'charge' || (m.st === 'takeoff' && m.lifted);
+  const near = () => (st === 'off' || st === 'done') && pl.y > VENUE.h - 0.6 && Math.hypot(pl.x - VENUE.booth.x, pl.z - VENUE.booth.z) < 3;
+  function help(on) { if (!on) { showHelp(); return; } document.getElementById('stat').innerHTML = '<b>鳥人間</b>：桟橋の先まで走って飛び出す<br>空中で<b>Space</b>＝羽ばたき（スタミナを使う）・押しっぱなし＝滑空（タダ）<br>白い柱＝上昇気流（タダでのぼる）・金の輪＝スタミナ回復・<b>R</b>＝やり直し'; }
+  function start() { if (!mate) { msg('相棒に乗ってから出よう'); return; } clearMovementInput(); st = 'ready'; stam = MAXS; dist = 0; landAt = null; resetRings(); res.classList.remove('show'); who = mate;
+    Object.assign(mate, { x: VENUE.start.x, z: VENUE.start.z, y: VENUE.h, vy: 0, v: 0, yaw: Math.PI, st: 'ground', f: 0, lifted: false }); pl.x = mate.x; pl.z = mate.z; pl.y = mate.y; pl.yaw = Math.PI; camPos = null; camEye = null;
+    placeBest(); hud.classList.add('show'); help(true); draw(); msg(mate.canFly ? '桟橋の先から飛び出せ！' : '飛べへん子やけど…いったれ！'); }
+  function off() { st = 'off'; hud.classList.remove('show'); res.classList.remove('show'); help(false); }
+  function end() { st = 'done'; landAt = { x: mate.x, z: mate.z }; const prev = bestNow, nb = save(dist); hud.classList.remove('show'); help(false);
+    splash.position.set(mate.x, 0.45, mate.z); splashT = 0; pop(new THREE.Vector3(mate.x, mate.y + 1.2, mate.z), mate.y < 0.3 ? 'ドボン！' : 'ズザッ！', '#fff', 26);
+    document.getElementById('rT').textContent = nb ? '新記録！' : (mate.y < 0.3 ? 'ドボン！' : '着地！');
+    document.getElementById('rR').innerHTML = '今回 <b>' + dist.toFixed(1) + 'm</b><br><span style="color:#6d685f">ベスト ' + Math.max(prev, dist).toFixed(1) + 'm' + (nb && prev > 0 ? '（+' + (dist - prev).toFixed(1) + 'm）' : '') + '</span>';
+    res.classList.toggle('nb', nb); res.classList.add('show'); placeBest(); }
+  function again() { if (!mate || st === 'off' && !(landAt && Math.hypot(pl.x - landAt.x, pl.z - landAt.z) < 40)) return; start(); } // 着いた所の近くならRで会場へ一瞬で戻る
+  function flap() { if (st !== 'ready' && st !== 'fly') return 1; const c = cost(); if (stam >= c) { stam -= c; return 1; } const k = stam / c; stam = 0; if (mate) pop(new THREE.Vector3(mate.x, mate.y + mate.info.h + 0.4, mate.z), 'ヘトヘト…', '#ffd6c9', 16); return k * 0.6; }
+  function draw() { document.getElementById('bD').textContent = dist.toFixed(1); const over = bestNow > 0.5 && dist > bestNow;
+    document.getElementById('bB').textContent = bestNow > 0.5 ? (over ? 'ベスト更新中！（' + bestNow.toFixed(1) + 'm）' : 'ベスト ' + bestNow.toFixed(1) + 'm') : 'ベスト まだなし';
+    hud.classList.toggle('over', over); hud.classList.toggle('low', stam < cost()); document.getElementById('bS').style.width = (stam / MAXS * 100) + '%'; }
+  function tick(dt) { const t = performance.now() / 1000;
+    for (const w of wisps) { const { u, ph } = w.userData, k = (t * 0.35 + ph) % 1; w.position.set(u.x, k * u.top, u.z); w.material.opacity = 0.5 * Math.sin(k * Math.PI); }
+    for (const r of rings) r.m.rotation.y = r.used ? r.m.rotation.y : Math.sin(t * 1.4 + r.z) * 0.35;
+    if (splashT < 1.2) { splashT += dt; splash.scale.setScalar(1 + splashT * 5); splash.material.opacity = Math.max(0, 0.9 - splashT * 0.8); }
+    if (st === 'off') { if (mate !== who) { who = mate; placeBest(); } return; }
+    if (mate !== who || !mate) { who = mate; off(); placeBest(); return; }
+    const m = mate;
+    if (st === 'ready') { if (m.z < VENUE.edge) st = 'fly'; else if (m.y < VENUE.h - 0.5) { if (m.z < VENUE.z0) st = 'fly'; else { msg('コースアウト！ 受付からやり直そ'); off(); return; } } }
+    if (st === 'fly') { dist = Math.max(0, VENUE.edge - m.z); const cy = m.y + m.info.h * 0.5;
+      for (const r of rings) if (!r.used && Math.abs(m.z - r.z) < 1 && Math.hypot(m.x - r.x, cy - r.y) < 2.1) { r.used = true; stam = Math.min(MAXS, stam + 30); r.m.material.opacity = 0.25; r.m.scale.setScalar(1.25); pop(new THREE.Vector3(r.x, r.y + 1.2, r.z), '+スタミナ', '#ffe9a8', 18); }
+      if (!air(m)) { end(); return; } }
+    if (st === 'ready' || st === 'fly') draw();
+    if (st === 'done' && landAt && Math.hypot(m.x - landAt.x, m.z - landAt.z) > 14) res.classList.remove('show'); }
+  document.getElementById('birdBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; start(); });
+  document.getElementById('rAgain').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; start(); });
+  document.getElementById('rSwim').addEventListener('pointerdown', e => { e.preventDefault(); res.classList.remove('show'); st = 'off'; });
+  return { near, start, again, flap, tick, off, get st() { return st; }, get stam() { return stam; }, get dist() { return dist; }, rings, UPDRAFTS };
+})();
+window.__bird = BIRD; /* 検証用 */
 addEventListener('error', e => { const el = document.getElementById('dbg'); el.textContent = 'エラー：' + (e.message || ''); el.style.display = 'block'; });
 // はじめて来た時：ツノトカゲの設計図を渡して乗せる。前に乗ってた子がいれば、いちばん新しい作品に乗る
 { let L = loadWorks(); if (!L.length) { makeBlueprint('tokage'); L = loadWorks(); } if (L.length) setMate(L[0]); else showHelp(); }

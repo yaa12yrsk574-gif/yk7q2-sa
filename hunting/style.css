@@ -30,3 +30,14 @@
   #tuneRows .wide { grid-column:1 / -1; grid-template-columns:7.5em 1fr 4.5em auto; }
   #tuneRows .wide .btn { padding:4px 8px; font-size:11px; }
   @media (max-width:520px) { #tuneRows { grid-template-columns:1fr; } }
+
+  /* 鳥人間 */
+  #bird { position:fixed; right:10px; top:10px; z-index:6; display:none; flex-direction:column; align-items:center; gap:3px; background:var(--panel); border:1.5px solid var(--line); border-radius:14px; padding:6px 16px 8px; min-width:180px; pointer-events:none; }
+  #bird.show { display:flex; }
+  #bird .d { font-size:34px; font-weight:900; line-height:1; } #bird .d small { font-size:15px; margin-left:3px; }
+  #bird .bb { font-size:13px; font-weight:800; color:var(--sub); } #bird.over .bb { color:var(--acc); }
+  #bird .sb { width:170px; height:9px; border-radius:9px; background:#e6dfd2; overflow:hidden; } #bird .sb i { display:block; height:100%; width:100%; background:#3fa36b; transition:width .15s; } #bird.low .sb i { background:#d9572b; }
+  #bird .sl { font-size:10px; font-weight:800; color:var(--sub); }
+  #birdRes { position:fixed; left:50%; top:104px; transform:translateX(-50%); z-index:21; display:none; flex-direction:column; align-items:center; gap:8px; background:#faf7f1; border:1.5px solid var(--line); border-radius:16px; padding:12px 18px; box-shadow:0 4px 15px #0002; text-align:center; }
+  #birdRes.show { display:flex; } #birdRes .t { font-size:22px; font-weight:900; } #birdRes.nb .t { color:var(--acc); }
+  #birdRes .r { font-size:15px; font-weight:800; line-height:1.6; } #birdRes .row { display:flex; gap:8px; align-items:center; }
