@@ -135,7 +135,43 @@ window.BoneTemplates = (() => {
     return { bones: B, sym: true, v6: 1, axis: 0, tpl: { kind: 'hito', v: 1 } }; }
   function hitoActs() { const R = {}; for (const b of hitoData().bones) R[b.id] = b.pts; const P2 = cl(R); P2[1] = R[1].map((p, i) => [p[0], p[1] - .01 + i * .006, p[2]]);
     return { R, acts: [{ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }, { f: 12, label: '息を吸う' }], keys: [{ f: 0, pose: cl(R) }, { f: 12, pose: P2 }], seg: {} } }] }; }
-  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs }, hito: { name: '人の素体', data: hitoData, acts: hitoActs } };
+
+  // ===== 試す種族（v13）：クモ・トリ・ヘビ。骨組み・IK・脚のリンク・腰の付け替えを試す用 =====
+  const PR = (...a) => a.map(([t, r]) => ({ t, r }));
+  function finish(B, kind, root) { for (const b of B) { b.av = 1; const p = b.parent != null && B.find(x => x.id === b.parent); if (p) { const q = p.pts[b.at], d = [b.pts[0][0] - q[0], b.pts[0][1] - q[1], b.pts[0][2] - q[2]]; if (Math.hypot(...d) > 0.002) b.atOff = d.map(r4); } }
+    return { bones: B, sym: true, v6: 1, axis: 0, tpl: { kind, v: 1 }, root }; }
+  function twinOf(B, s, t) { const b = B.find(x => x.id === s), m = cl(b); m.id = t; m.pts = b.pts.map(p => [-p[0], p[1], p[2]]); m.wp = cl(b.wn); m.wn = cl(b.wp); m.twin = s; b.twin = t; B.push(m); }
+  // クモ：胴（腹→くびれ→頭胸）。脚8本は頭胸の1つの関節から生える＝分かれ道
+  function kumoData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 8 });
+    add(1, null, null, [[0, .32, -.42], [0, .28, -.14], [0, .26, .06], [0, .26, .2]], PR([0, .04], [.12, .13], [.3, .12], [.45, .035], [.62, .09], [.85, .08], [1, .03]), PR([0, .04], [.12, .11], [.3, .1], [.45, .03], [.62, .07], [.85, .065], [1, .025]));
+    const C = [0, .26, .06], deg = [38, 72, 108, 142]; deg.forEach((a, n) => { const r = a * Math.PI / 180, d = [-Math.sin(r), 0, Math.cos(r)], at = (k, y) => [C[0] + d[0] * k, y, C[2] + d[2] * k];
+      add(5 + n * 2, 1, 2, [at(.07, .26), at(.2, .42), at(.36, .14), at(.46, .01)], PR([0, .025], [.4, .02], [1, .007]), PR([0, .025], [.4, .02], [1, .007])); });
+    for (let n = 0; n < 4; n++) twinOf(B, 5 + n * 2, 6 + n * 2); return finish(B, 'kumo', { id: 1, i: 2 }); }
+  function kumoActs() { const R = {}; for (const b of kumoData().bones) R[b.id] = b.pts; const P = dy => { const o = {}; for (const id in R) { const r = R[id]; o[id] = +id === 1 ? r.map(p => R4([p[0], p[1] + dy, p[2]])) : r.map((p, i) => R4([p[0], p[1] + dy * (1 - i / (r.length - 1)), p[2]])); } return o; };
+    return { R, acts: [{ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }, { f: 12, label: '息を吸う' }], keys: [{ f: 0, pose: P(0) }, { f: 12, pose: P(-0.02) }], seg: {} } }] }; }
+  // トリ型の二足：膝（前）→かかと（後ろに曲がる＝逆膝）→足→つま先
+  function toriData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 8 });
+    add(1, null, null, [[0, .8, -.14], [0, .86, .02], [0, .88, .14]], PR([0, .1], [.5, .16], [1, .11]), PR([0, .11], [.5, .16], [1, .12]));
+    add(2, 1, 2, [[0, .88, .14], [0, 1.05, .2], [0, 1.22, .2]], PR([0, .045], [1, .035]), PR([0, .045], [1, .035]));
+    add(3, 2, 2, [[0, 1.22, .2], [0, 1.25, .3], [0, 1.22, .42]], PR([0, .05], [.4, .055], [1, .012]), PR([0, .05], [.4, .055], [1, .01]));
+    add(4, 1, 0, [[0, .8, -.14], [0, .86, -.34]], PR([0, .06], [1, .02]), PR([0, .05], [1, .015]));
+    add(5, 1, 0, [[-.09, .78, -.08], [-.1, .55, .06], [-.1, .3, -.08], [-.1, .04, -.02], [-.1, .01, .1]], PR([0, .05], [.3, .035], [.6, .022], [1, .012]), PR([0, .05], [.3, .035], [.6, .022], [1, .01]));
+    add(7, 1, 2, [[-.12, .9, .08], [-.2, .86, -.08], [-.18, .8, -.22]], PR([0, .02], [1, .008]), PR([0, .05], [.5, .07], [1, .02]));
+    twinOf(B, 5, 6); twinOf(B, 7, 8); return finish(B, 'tori', { id: 1, i: 0 }); }
+  function toriActs() { const R = {}; for (const b of toriData().bones) R[b.id] = b.pts; const P = dy => { const o = {}; for (const id in R) { const r = R[id]; o[id] = (+id === 5 || +id === 6) ? r.map((p, i) => R4([p[0], p[1] + dy * Math.max(0, 1 - i / 3), p[2]])) : r.map(p => R4([p[0], p[1] + dy, p[2]])); } return o; };
+    return { R, acts: [{ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }, { f: 12, label: '息を吸う' }], keys: [{ f: 0, pose: P(0) }, { f: 12, pose: P(-0.02) }], seg: {} } }] }; }
+  // ヘビ：脚なし。腰（根っこ）は体の真ん中。頭に付け替えると、頭が先導して体がついてくる
+  function hebiData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 8 });
+    add(1, null, null, [[0, .08, -.1], [0, .08, .15], [0, .08, .4], [0, .09, .62]], PR([0, .06], [1, .055]), PR([0, .06], [1, .055]));
+    add(2, 1, 3, [[0, .09, .62], [0, .1, .72], [0, .09, .84]], PR([0, .05], [.4, .075], [1, .03]), PR([0, .05], [.4, .055], [1, .025]));
+    add(3, 1, 0, [[0, .08, -.1], [0, .08, -.35], [0, .08, -.6], [0, .08, -.85]], PR([0, .06], [1, .045]), PR([0, .06], [1, .045]));
+    add(4, 3, 3, [[0, .08, -.85], [0, .07, -1.05], [0, .06, -1.25]], PR([0, .045], [1, .006]), PR([0, .045], [1, .006]));
+    return finish(B, 'hebi', { id: 1, i: 0 }); }
+  function hebiActs() { const R = {}; for (const b of hebiData().bones) R[b.id] = b.pts; const P = (ph, A) => { const o = {}; for (const id in R) o[id] = R[id].map(p => R4([A * Math.sin(ph + p[2] * 5.5) * (0.35 + 0.65 * Math.min(1, (0.9 - p[2]) / 1.6)), p[1], p[2]])); return o; };
+    const keys = []; for (let f = 0; f < 16; f += 2) keys.push({ f, pose: P(f / 16 * Math.PI * 2, 0.11) });
+    return { R, acts: [{ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }], keys: [{ f: 0, pose: P(0, 0.02) }, { f: 12, pose: P(Math.PI, 0.02) }], seg: {} } },
+      { slot: 'walk', name: '歩き', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'くねる' }, { f: 8, label: '逆にくねる' }], keys, seg: {} } }] }; }
+  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs }, hito: { name: '人の素体', data: hitoData, acts: hitoActs }, kumo: { name: 'クモ', data: kumoData, acts: kumoActs }, tori: { name: 'トリ', data: toriData, acts: toriActs }, hebi: { name: 'ヘビ', data: hebiData, acts: hebiActs } };
   const cache = {};
   const kindAct = k => cache[k] || (cache[k] = KINDS[k].acts());
   function detect(S) { if (S && S.tpl && KINDS[S.tpl.kind]) return S.tpl.kind; if (!S || !S.bones) return null;

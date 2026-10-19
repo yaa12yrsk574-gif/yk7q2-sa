@@ -37,7 +37,7 @@
   .work input { font:inherit; font-size:14px; padding:4px 6px; border:1.5px solid var(--ink); border-radius:6px; }
   .work .acts { display:flex; flex-wrap:wrap; gap:4px; } .work .acts button { font:inherit; font-size:11px; font-weight:800; padding:4px 7px; border-radius:7px; border:1.5px solid var(--line); background:#fff; color:var(--ink); }
   #tl { position:fixed; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); z-index:7; background:var(--panel); border:1.5px solid var(--line); border-radius:14px; padding:6px 8px 4px; display:none; flex-direction:column; gap:4px; }
-  body.anim #tl { display:flex; } body.anim #hint { bottom:calc(178px + env(safe-area-inset-bottom)); } body.anim #panel { display:none !important; }
+  body.anim #tl { display:flex; } body.anim #hint { bottom:calc(214px + env(safe-area-inset-bottom)); } body.anim #panel { display:none !important; }
   #tl .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; } #tl .btn { padding:6px 9px; font-size:12px; }
   #frameLbl { font-weight:900; font-size:13px; min-width:6.5em; } #tl .lb { font-size:11px; font-weight:800; color:var(--sub); }
   #actSel { font-weight:900; max-width:150px; } #tl input[type=range] { width:150px; accent-color:#8a4fd0; } #tl .lb2 { font-size:12px; font-weight:900; min-width:7em; }
@@ -50,3 +50,8 @@
   body.pc #lassoBtn, body.pc #addBtn { display:none !important; }
   .kb { display:none; font-size:.72em; font-weight:800; opacity:.55; margin-left:.25em; } body.pc .kb { display:inline; }
   .empty { grid-column:1/-1; color:var(--sub); text-align:center; padding:30px; }
+
+#recRow .seg button { padding:5px 9px; font-size:12px; }
+#recBtn.on { background:#c0392b; color:#fff; border-color:#c0392b; }
+#tl button.on { box-shadow:inset 0 0 0 2px #8a4fd0; }
+.spRow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 0 8px; font-size:12px; font-weight:800; color:var(--sub); } .spRow .btn { font-size:12px; padding:5px 9px; }

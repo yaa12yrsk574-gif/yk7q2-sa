@@ -9,7 +9,16 @@ const V3 = a => new THREE.Vector3(a[0],a[1],a[2]), r4 = v => Math.round(v*1e4)/1
 const boneById = id => state.current.bones.find(b => b.id === id);
 const ptsOf = (b, mir) => b.pts.map(p => new THREE.Vector3(mir ? -p[0] : p[0], p[1], p[2]));
 const ringsOf = b => { if (!b.rings) { let L = 0; for (let i = 1; i < b.pts.length; i++) L += V3(b.pts[i]).distanceTo(V3(b.pts[i - 1])); b.rings = Math.max(4, Math.min(28, Math.round(L / 0.035) + 2)); } return b.rings; };
-const angOf = (k, n) => k / n * Math.PI * 2 + Math.PI / n;
+// 断面の頂点の角度。av=1（v13〜の骨）は頂点を真横・真上・真下に置く＝描いた輪郭の一番外に頂点が乗る。古い骨は今まで通り半目ずらし
+const angOf = (k, n, av) => k / n * Math.PI * 2 + (av ? 0 : Math.PI / n);
+const mirK = (b, k, n) => b && b.av ? ((Math.round(n / 2) - k) % n + n) % n : ((Math.round(n / 2) - 1 - k) % n + n) % n; /* 左右反転した時の頂点番号 */
+const flipZK = (b, k, n) => b && b.av ? ((n - k) % n + n) % n : ((n - 1 - k) % n + n) % n; /* 前後反転 */
+// 輪の位置（骨に沿った t）。描いたシルエットの角（k付きの点）には必ず輪を置く＝ギザギザがそのまま乗る
+function ringTs(b) { const R = ringsOf(b), base = []; for (let r = 0; r < R; r++) base.push(r / (R - 1));
+  const ks = []; for (const key of ['wp', 'wn', 'dp', 'dn']) for (const p of b[key] || []) if (p.k && p.t > 0.002 && p.t < 0.998) ks.push(p.t);
+  if (!ks.length) return base; ks.sort((a, c) => a - c); const kk = []; for (const t of ks) if (!kk.length || t - kk[kk.length - 1] > 0.004) kk.push(t);
+  const gap = 0.45 / (R - 1), out = kk.concat(base.filter(t => t === 0 || t === 1 || kk.every(q => Math.abs(q - t) > gap))); out.sort((a, c) => a - c);
+  const u = []; for (const t of out) if (!u.length || t - u[u.length - 1] > 0.002) u.push(t); u[0] = 0; u[u.length - 1] = 1; return u.length > 96 ? base : u; }
 const bezStore = B => ({ a: B.a.map(v => [v.x, v.y, v.z].map(r4)), hi: B.hi.map(v => [v.x, v.y, v.z].map(r4)), ho: B.ho.map(v => [v.x, v.y, v.z].map(r4)) });
 const kidsOf = id => state.current.bones.filter(c => c.parent === id);
 function smoothPath(P, n) {
@@ -21,7 +30,7 @@ function smoothPath(P, n) {
   for (let k = 0; k < n; k++) { const s = L * k / (n - 1); while (j < raw.length - 2 && acc[j + 1] < s) j++; const t = (s - acc[j]) / Math.max(1e-9, acc[j + 1] - acc[j]); out.push(raw[j].clone().lerp(raw[j + 1], Math.max(0, Math.min(1, t)))); }
   return { pts: out, len: L }; }
 function profAt(pr, t) { if (!pr || !pr.length) return 0.04; if (t <= pr[0].t) return pr[0].r; if (t >= pr[pr.length - 1].t) return pr[pr.length - 1].r;
-  for (let i = 0; i < pr.length - 1; i++) if (t <= pr[i + 1].t) { const u = (t - pr[i].t) / Math.max(1e-9, pr[i + 1].t - pr[i].t), s = u * u * (3 - 2 * u); return pr[i].r + (pr[i + 1].r - pr[i].r) * s; } return pr[pr.length - 1].r; }
+  for (let i = 0; i < pr.length - 1; i++) if (t <= pr[i + 1].t) { const u = (t - pr[i].t) / Math.max(1e-9, pr[i + 1].t - pr[i].t), s = pr[i].k && pr[i + 1].k ? u : u * u * (3 - 2 * u); return pr[i].r + (pr[i + 1].r - pr[i].r) * s; } return pr[pr.length - 1].r; } /* 描いた点どうし（k）はまっすぐ＝角が立つ */
 function frames(path) { const Z = new THREE.Vector3(0, 0, 1), X = new THREE.Vector3(1, 0, 0);
   if (OPT.transport) return framesTransport(path, Z, X);
   return path.map((p, i) => { const a = path[Math.max(0, i - 1)], b = path[Math.min(path.length - 1, i + 1)], T = b.clone().sub(a).normalize();
@@ -38,14 +47,16 @@ function framesTransport(path, Z, X) { const out = []; let W = null;
   return out; }
 function boneGeom(b) { // 元の側の形（鏡はこれを左右反転して作る）
   const P = ptsOf(b, false); if (P.length < 2) return null;
-  const rings = ringsOf(b), path = smoothPath(P, rings).pts, F = frames(path), n = b.sides || 8, V = [], I = [];
-  for (let r = 0; r < rings; r++) { const t = r / (rings - 1), f = F[r];
-    for (let k = 0; k < n; k++) { const a = angOf(k, n), c = Math.cos(a), s = Math.sin(a), rw = profAt(c >= 0 ? b.wp : b.wn, t), rd = profAt(s >= 0 ? b.dp : b.dn, t), o = b.off[r + '_' + k] || [0, 0, 0];
+  const ts = ringTs(b), uni = ts.length === ringsOf(b) && ts.every((t, r) => Math.abs(t - r / (ts.length - 1)) < 1e-9), rings = ts.length;
+  let path; if (uni) path = smoothPath(P, rings).pts; else { const D = smoothPath(P, 241).pts; path = ts.map(t => { const x = t * 240, i = Math.min(239, Math.floor(x)); return D[i].clone().lerp(D[i + 1], x - i); }); }
+  const F = frames(path), n = b.sides || 8, V = [], I = [];
+  for (let r = 0; r < rings; r++) { const t = ts[r], f = F[r];
+    for (let k = 0; k < n; k++) { const a = angOf(k, n, b.av), c = Math.cos(a), s = Math.sin(a), rw = profAt(c >= 0 ? b.wp : b.wn, t), rd = profAt(s >= 0 ? b.dp : b.dn, t), o = b.off[r + '_' + k] || [0, 0, 0];
       const p = path[r].clone().addScaledVector(f.Wd, c * rw + o[0]).addScaledVector(f.Dd, s * rd + o[1]).addScaledVector(f.T, o[2]); V.push(p.x, p.y, p.z); } }
   const cap = (r, dir) => { const t = r === 0 ? 0 : 1, f = F[r], m = Math.min(profAt(b.wp, t), profAt(b.dp, t)), c = path[r].clone().addScaledVector(f.T, dir * m * 0.6); V.push(c.x, c.y, c.z); return V.length / 3 - 1; };
   for (let r = 0; r < rings - 1; r++) for (let k = 0; k < n; k++) { const a = r * n + k, bb = r * n + (k + 1) % n, c = (r + 1) * n + k, d = (r + 1) * n + (k + 1) % n; I.push(a, c, bb, bb, c, d); }
   const c0 = cap(0, -1), c1 = cap(rings - 1, 1); for (let k = 0; k < n; k++) { I.push(c0, k, (k + 1) % n); I.push(c1, (rings - 1) * n + (k + 1) % n, (rings - 1) * n + k); }
-  return { V, I, path, F, n, rings };
+  return Object.defineProperty({ V, I, path, F, n, rings }, 'ts', { value: ts }); /* ts は計算比較の外（JSONに出さない） */
 }
 function topoBones() { const out = [], seen = new Set(), visit = b => { if (seen.has(b.id)) return; seen.add(b.id); const p = b.parent != null && boneById(b.parent); if (p) visit(p); out.push(b); }; state.current.bones.forEach(visit); return out; }
 function blendPose(A, B, u) { // 骨の向きを回転で補間（長さは保つ）。子の根元は親の関節にくっつける
@@ -84,8 +95,41 @@ function applyPath(P, key, ctrl, u, a, b) { const [id, i] = key.split('_').map(N
   P[id] = nw.map(v => [v.x, v.y, v.z].map(r4));
   for (const c of kidsOf(id)) { const k = c.at; if (k == null || k < 1) continue; const q = qs[Math.min(k, i)], o = old[k], n = nw[k]; txTree(P, c.id, v => n.clone().add(v.sub(o).applyQuaternion(q))); } }
 function poseU(a, b, u, skipKey) { const P = blendPose(a.pose, b.pose, u), s = segOf(a); for (const k in s.paths) if (k !== skipKey) applyPath(P, k, s.paths[k], u, a, b); return P; }
-function poseAt(f) { const { a, b } = segInfo(f); if (!a) return state.current.anim.keys[0].pose; if (!b) return a.pose; const j = drawIdx(a, b, f); if (j === 0) return a.pose;
+function poseKeys(f) { const { a, b } = segInfo(f); if (!a) return state.current.anim.keys[0].pose; if (!b) return a.pose; const j = drawIdx(a, b, f); if (j === 0) return a.pose;
   const s = segOf(a); if (s.fix[j]) return s.fix[j]; return poseU(a, b, spacingOf(a, b)[j - 1]); }
+// ---- パフォーム（記録）：録った骨は記録の動き。なめらか（sm）とコマ打ち（step）はここで効く ----
+const restOf = id => { const R = state.current.rest, b = boneById(id); return (R && R[id]) || (b && b.pts); };
+const wrapF = (A, g) => A.loop ? ((g % A.len) + A.len) % A.len : Math.max(0, Math.min(A.len, g));
+function perfIds(A) { const pf = A && A.perf; if (!pf || !pf.fr) return null; if (pf._ids && pf._n === Object.keys(pf.fr).length) return pf._ids; const ids = new Set(); for (const f in pf.fr) for (const id in pf.fr[f]) ids.add(+id);
+  Object.defineProperty(pf, '_ids', { value: ids, writable: true, configurable: true }); Object.defineProperty(pf, '_n', { value: Object.keys(pf.fr).length, writable: true, configurable: true }); return ids; }
+const qOf = (a, b) => new THREE.Quaternion().setFromUnitVectors(a.clone().normalize(), b.clone().normalize());
+// 親が動いた骨の、記録してない子を付いていかせる（親の骨の向きの変わり方で回す）
+function reattach(out, old, id, skip) { for (const c of kidsOf(id)) { if (skip.has(c.id) || c.at == null) continue; const po = old[id], pn = out[id], k = c.at; if (!po || !pn || !po[k] || !pn[k]) continue;
+    const k0 = k > 0 ? k - 1 : 0, k1 = k > 0 ? k : Math.min(1, po.length - 1), q = k1 > k0 ? qOf(V3(po[k1]).sub(V3(po[k0])), V3(pn[k1]).sub(V3(pn[k0]))) : new THREE.Quaternion(), O = V3(po[k]), N = V3(pn[k]);
+    const tx = id2 => { if (!out[id2]) return; out[id2] = out[id2].map(p => { const v = N.clone().add(V3(p).sub(O).applyQuaternion(q)); return [v.x, v.y, v.z].map(r4); }); for (const g of kidsOf(id2)) if (!skip.has(g.id)) tx(g.id); };
+    out = Object.assign(out, {}); tx(c.id); } return out; }
+function perfPose(f) { const A = state.current.anim, pf = A.perf, ids = perfIds(A); const step = Math.max(1, (pf && pf.step) || 1), g = ids ? Math.floor(f / step) * step : f, P = poseKeys(g); if (!ids || !ids.size) return P;
+  const out = Object.assign({}, P), w = Math.round(Math.max(0, Math.min(1, pf.sm || 0)) * 4);
+  for (const b of topoBones()) { if (!ids.has(b.id)) continue; const base = pf.fr[g] && pf.fr[g][b.id]; if (!base) continue; const sm = [];
+    for (let d = -w; d <= w; d++) { const h = wrapF(A, g + d), fr = pf.fr[h]; if (fr && fr[b.id] && fr[b.id].length === base.length) sm.push({ v: fr[b.id], k: w + 1 - Math.abs(d) }); }
+    const kt = sm.reduce((a, o) => a + o.k, 0), avg = base.map((_, i) => { const v = new THREE.Vector3(); for (const o of sm) v.addScaledVector(V3(o.v[i]), o.k / kt); return v; });
+    const pts = [avg[0]]; for (let i = 1; i < base.length; i++) { const L = V3(base[i]).distanceTo(V3(base[i - 1])), d = avg[i].clone().sub(pts[i - 1]); pts.push(pts[i - 1].clone().addScaledVector(d.lengthSq() > 1e-12 ? d.normalize() : V3(base[i]).sub(V3(base[i - 1])).normalize(), L)); } /* ならしても骨の長さは変えない */
+    const par = b.parent != null && out[b.parent]; if (par && b.at != null && par[b.at]) { const D = V3(par[b.at]).add(b.atOff ? V3(b.atOff) : new THREE.Vector3()).sub(pts[0]); pts.forEach(p => p.add(D)); } /* 親の関節にくっつける */
+    const old = out; out[b.id] = pts.map(v => [v.x, v.y, v.z].map(r4)); reattach(out, P, b.id, ids); }
+  return out; }
+// ---- 脚のリンク：元の骨と同じ動き（〇コマずらし）。反対側にある骨は左右反転で写す ----
+const sideOf = id => { const r = restOf(id); if (!r) return 0; const ax = state.current.axis || 0, m = r.reduce((a, p) => a + p[0], 0) / r.length - ax; return Math.abs(m) < 0.02 ? 0 : Math.sign(m); };
+function linkPose(P, f) { const A = state.current.anim, L = A && A.links; if (!L || !Object.keys(L).length) return P; let out = null;
+  for (const b of topoBones()) { const l = L[b.id]; if (!l) continue; const src = boneById(l.src); if (!src || L[src.id] || src.pts.length !== b.pts.length) continue;
+    const off = (l.off || 0) + (l.half ? Math.round(A.len / 2) : 0), g = wrapF(A, f - off), Ps = g === f ? P : perfPose(g), ps = Ps[src.id], rs = restOf(src.id), rf = restOf(b.id); if (!ps || !rs || !rf || ps.length !== rs.length || rf.length !== rs.length) continue;
+    const mir = sideOf(src.id) * sideOf(b.id) < 0, cur = out || Object.assign({}, P);
+    const par = b.parent != null && cur[b.parent]; let start;
+    if (par && b.at != null && par[b.at]) start = V3(par[b.at]).add(b.atOff ? V3(b.atOff) : new THREE.Vector3());
+    else { const d = V3(ps[0]).sub(V3(rs[0])); if (mir) d.x = -d.x; start = V3(rf[0]).add(d); }
+    const pts = [start]; for (let k = 0; k < rf.length - 1; k++) { let q = qOf(V3(rs[k + 1]).sub(V3(rs[k])), V3(ps[k + 1]).sub(V3(ps[k]))); if (mir) q = new THREE.Quaternion(q.x, -q.y, -q.z, q.w); pts.push(pts[k].clone().add(V3(rf[k + 1]).sub(V3(rf[k])).applyQuaternion(q))); }
+    const old = Object.assign({}, cur); cur[b.id] = pts.map(v => [v.x, v.y, v.z].map(r4)); reattach(cur, old, b.id, new Set(Object.keys(L).map(Number))); out = cur; }
+  return out || P; }
+function poseAt(f) { return linkPose(perfPose(f), f); }
 function measureGaitQuality(data, anim, slot) {
   const neutral = {factor:1,stride:0,lift:0,feet:0};
   if(!data||!data.bones||!anim||!anim.keys||anim.keys.length<2||!anim.len)return neutral;
@@ -133,5 +177,5 @@ function detailPointsFromMesh(mesh,stroke){
   }
   return pts;
 }
-return {smoothPath,profAt,frames,boneGeom,topoBones,blendPose,segInfo,keyAt,segOf,nOf,drawFrames,drawIdx,spacingOf,bezNorm,bezBake,cubicAt,bezSample,evalPath,txTree,applyPath,poseU,poseAt,measureGaitQuality,detailPointsFromMesh,ptsOf,ringsOf,angOf,bezStore,kidsOf};
+return {poseKeys,perfPose,perfIds,sideOf,ringTs,mirK,flipZK,smoothPath,profAt,frames,boneGeom,topoBones,blendPose,segInfo,keyAt,segOf,nOf,drawFrames,drawIdx,spacingOf,bezNorm,bezBake,cubicAt,bezSample,evalPath,txTree,applyPath,poseU,poseAt,measureGaitQuality,detailPointsFromMesh,ptsOf,ringsOf,angOf,bezStore,kidsOf};
 }});
