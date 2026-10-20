@@ -361,7 +361,7 @@ function applyMateSize() { if (!mate) return; const s = testSize || mate.baseSiz
   mate.seatY = Math.max(0.3, Math.min(top, 0.95 * s) * 0.8); mate.info = { h: Math.min(top, 0.95 * s), r: Math.max(0.18 * s, half * 1.05), power: s * s };
   const M = window.BodyMotion; mate.perfW = M.perf(s, 1, 'walk'); mate.perfR = M.perf(s, 1, 'run'); }
 function showHelp() { const fly = mate && mate.canFly;
-  document.getElementById('stat').innerHTML = mate ? '<b>WASD</b>移動・<b>Shift</b>歩く・<b>Space長押し→離す</b>でジャンプ' + (fly ? '<br>空中で<b>Space</b>＝羽ばたき（押しっぱなし＝滑空）' : '') + '<br><span style="color:#6d685f">池に入ると泳ぐ。動きは工房のアニメのまま</span>'
+  document.getElementById('stat').innerHTML = mate ? '<b>WASD</b>移動・<b>Shift</b>歩く・<b>Space長押し→離す</b>でジャンプ' + (fly ? '<br>空中で<b>Space</b>＝羽ばたき（押しっぱなし＝滑空）' : '') + '<br><span style="color:#6d685f">池に入ると泳ぐ。動きは工房のアニメのまま。<b>T</b>＝時間帯（夜は海が光る）</span>'
     : 'WASD／矢印で歩く。野生の子に近づいて<b>E</b>で調べると設計図'; }
 function renderPick() { const box = document.getElementById('pickList'), L = loadWorks(); box.innerHTML = '';
   if (!L.length) { box.innerHTML = '<div class="tag" style="padding:20px;text-align:center">工房の作品がまだない。野生の子に近づいてEで調べると設計図が手に入るで</div>'; return; }
@@ -402,6 +402,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) clear
 addEventListener('keydown', e => { if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; const k = e.key.toLowerCase(); keys.add(k); if (!document.body.classList.contains('pc')) document.body.classList.add('pc');
   if (k === 'e') { if (BIRD.near()) BIRD.start(); else if (inCamp(pl.x, pl.z, pl.y)) openTool(); else lookAt(); }
   if (k === 'r') BIRD.again();
+  if (k === 't' && !e.repeat) SKY.next();
   if (k === ' ') { e.preventDefault(); if (!e.repeat) spaceDown(); } });
 addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') spaceUp(); });
 addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') document.body.classList.add('pc'); }, true);
@@ -487,6 +488,7 @@ function step(now) {
   for (const w of wilds) stepWild(w, dt);
   stepRival(dt);
   BIRD.tick(dt);
+  SKY.tick(dt); GLOW.tick(dt);
   { const g = groundAt(pl.x, pl.z, pl.y + 0.01), h = Math.max(0, pl.y - g), s = (mate ? mate.info.r * 2.2 : 0.7); shadow.position.set(pl.x, g + 0.03, pl.z); shadow.scale.setScalar(s * (1 + h * 0.08)); shadow.material.opacity = Math.max(0.05, 0.25 - h * 0.025); shadow.visible = !(mate && mate.st === 'swim'); }
   // ボタン：キャンプ＝工房、野生の子の近く＝調べる
   { const c = inCamp(pl.x, pl.z, pl.y), bn = !c && BIRD.near(), nw = !c && !bn && pl.y < 0.6 && nearWild(); document.getElementById('campBtn').style.display = c ? 'block' : 'none'; document.getElementById('birdBtn').style.display = bn ? 'block' : 'none'; const lb = document.getElementById('lookBtn'); lb.style.display = nw ? 'block' : 'none'; if (nw) lb.firstChild.textContent = '🔍 ' + nw.name + 'を調べる'; }
@@ -559,6 +561,97 @@ const BIRD = (() => {
   return { near, start, again, flap, tick, off, get st() { return st; }, get stam() { return stam; }, get dist() { return dist; }, rings, UPDRAFTS };
 })();
 window.__bird = BIRD; /* 検証用 */
+// ============ 時間帯：朝→昼→夕方→夜 がゆっくり回る。右上の時計ボタン（T）で次の時間帯へ早回し ============
+const SKY = (() => {
+  const CYCLE = 480, C = h => new THREE.Color(h); // 1日＝8分
+  // p：0＝夜明け 0.15〜0.42＝昼 0.5＝夕方 0.66〜0.92＝夜
+  const K = [
+    { p: 0.00, sky: C(0xe9cdb8), sun: C(0xffcfa0), si: 0.9, hs: C(0xffe2cc), hg: C(0x6f7a5c), hi: 0.85, sea: C(0x5f8fae), pond: C(0x5a96b0), el: 0.18, near: 20, far: 100, night: 0.15 },
+    { p: 0.15, sky: C(0xdfe6dc), sun: C(0xfff3e0), si: 1.4, hs: C(0xffffff), hg: C(0x7d8a66), hi: 1.15, sea: C(0x4a9cc4), pond: C(0x5aa6c9), el: 0.85, near: 22, far: 110, night: 0 },
+    { p: 0.42, sky: C(0xdfe6dc), sun: C(0xfff3e0), si: 1.4, hs: C(0xffffff), hg: C(0x7d8a66), hi: 1.15, sea: C(0x4a9cc4), pond: C(0x5aa6c9), el: 0.85, near: 22, far: 110, night: 0 },
+    { p: 0.50, sky: C(0xf0b088), sun: C(0xff9a58), si: 1.2, hs: C(0xffd0ac), hg: C(0x6e6a50), hi: 0.85, sea: C(0x4f7d9e), pond: C(0x52809a), el: 0.12, near: 20, far: 100, night: 0.05 },
+    { p: 0.58, sky: C(0x46496e), sun: C(0xb08ab0), si: 0.35, hs: C(0x8a8cc0), hg: C(0x2e3328), hi: 0.6, sea: C(0x1d3550), pond: C(0x22405a), el: 0.05, near: 18, far: 90, night: 0.7 },
+    { p: 0.66, sky: C(0x0d1530), sun: C(0x9fb6ff), si: 0.5, hs: C(0x5a6a9e), hg: C(0x1a2018), hi: 0.55, sea: C(0x0a1a2e), pond: C(0x0e2236), el: 0.7, near: 16, far: 85, night: 1 },
+    { p: 0.92, sky: C(0x0d1530), sun: C(0x9fb6ff), si: 0.5, hs: C(0x5a6a9e), hg: C(0x1a2018), hi: 0.55, sea: C(0x0a1a2e), pond: C(0x0e2236), el: 0.7, near: 16, far: 85, night: 1 }];
+  const NAMES = [[0.0, '🌅 朝', 0.0], [0.12, '☀ 昼', 0.15], [0.46, '🌇 夕方', 0.47], [0.62, '🌙 夜', 0.66]];
+  const hemi = scene.children.find(o => o.isHemisphereLight);
+  let p = 0.2, target = null, shown = '';
+  // 星と月（霧に溶けない）
+  const stars = (() => { const n = 700, pos = new Float32Array(n * 3); let s = 777; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < n; i++) { const a = r() * 6.283, y = 0.08 + r() * 0.92, k = Math.sqrt(1 - y * y); pos.set([Math.cos(a) * k * 180, y * 180, Math.sin(a) * k * 180], i * 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false })); m.frustumCulled = false; m.renderOrder = -2; scene.add(m); return m; })();
+  const moon = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'), gr = x.createRadialGradient(64, 64, 20, 64, 64, 64); gr.addColorStop(0, 'rgba(255,250,232,1)'); gr.addColorStop(0.42, 'rgba(255,250,232,1)'); gr.addColorStop(0.5, 'rgba(200,215,255,.35)'); gr.addColorStop(1, 'rgba(200,215,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false, fog: false })); s.scale.setScalar(22); s.renderOrder = -1; scene.add(s); return s; })();
+  const MOON_DIR = new THREE.Vector3(-0.35, 0.55, -0.76).normalize();
+  const tmp = {};
+  function sample(q) { let a = K[K.length - 1], b = K[0], t = 0;
+    for (let i = 0; i < K.length; i++) { const A = K[i], B = K[(i + 1) % K.length], bp = i + 1 < K.length ? B.p : 1 + B.p; if (q >= A.p && q < bp) { a = A; b = B; t = (q - A.p) / (bp - A.p); break; } }
+    t = t * t * (3 - 2 * t);
+    for (const k of ['sky', 'sun', 'hs', 'hg', 'sea', 'pond']) tmp[k] = (tmp[k] || new THREE.Color()).copy(a[k]).lerp(b[k], t);
+    for (const k of ['si', 'hi', 'el', 'near', 'far', 'night']) tmp[k] = a[k] + (b[k] - a[k]) * t; return tmp; }
+  function nameOf(q) { let n = NAMES[0][1]; for (const [s, nm] of NAMES) if (q >= s) n = nm; return n; }
+  function next() { const cur = NAMES.findIndex(([s], i) => p >= s && (i + 1 >= NAMES.length || p < NAMES[i + 1][0])), nx = NAMES[(cur + 1) % NAMES.length]; target = nx[2]; msg(nx[1] + ' にする'); }
+  function tick(dt) {
+    if (target != null) { const d = ((target - p) % 1 + 1) % 1, st = Math.min(d, dt * 0.35); p = (p + st) % 1; if (d < 0.002) { p = target; target = null; } }
+    else p = (p + dt / CYCLE) % 1;
+    const s = sample(p);
+    scene.background.copy(s.sky); scene.fog.color.copy(s.sky); scene.fog.near = s.near; scene.fog.far = s.far;
+    if (hemi) { hemi.color.copy(s.hs); hemi.groundColor.copy(s.hg); hemi.intensity = s.hi; }
+    const night = s.night, ang = p * Math.PI * 2; sun.color.copy(s.sun); sun.intensity = s.si;
+    if (night > 0.5) sun.position.copy(MOON_DIR).multiplyScalar(10); else sun.position.set(Math.cos(ang) * 6, 9 * Math.max(0.15, s.el), 5);
+    MAP.seaM.material.color.copy(s.sea); MAP.seaM.material.opacity = 0.84 + night * 0.12; MAP.seaM.material.roughness = 0.25 + night * 0.55; MAP.water.material.color.copy(s.pond);
+    grid.material.opacity = 0.45 * (1 - night * 0.8);
+    stars.position.copy(cam.position); stars.material.opacity = Math.max(0, night - 0.2) * 1.1;
+    moon.position.copy(cam.position).addScaledVector(MOON_DIR, 170); moon.material.opacity = Math.max(0, night - 0.3) * 1.4;
+    document.body.classList.toggle('night', night > 0.5);
+    const nm = nameOf(p); if (nm !== shown) { shown = nm; document.getElementById('timeBtn').textContent = nm; } }
+  document.getElementById('timeBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; next(); });
+  return { tick, next, get p() { return p; }, set p(v) { p = ((v % 1) + 1) % 1; target = null; }, get night() { return sample(p).night; } };
+})();
+// ============ 夜の海が光る（夜光虫）：水の中で動いた所・着水・波打ち際だけ青く光る ============
+const GLOW = (() => {
+  const N = 4000, SURF = 0.44, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), P = [];
+  for (let i = 0; i < N; i++) { P.push({ t: 0, L: 0, b: 0, vx: 0, vz: 0 }); pos[i * 3 + 1] = -999; }
+  const tex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.2, map: tex, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); pts.frustumCulled = false; scene.add(pts);
+  let head = 0, live = 0, night = 0, waveT = 0, lastMate = null, prevSt = '', prevVy = 0;
+  const inSea = (x, z) => z < MAP.sea - 0.2 && x > -240 && x < 240;
+  function emit(x, z, b, L, vx, vz) { const i = head; head = (head + 1) % N; const q = P[i]; q.t = 0; q.L = L; q.b = b * night; q.vx = vx || 0; q.vz = vz || 0; pos[i * 3] = x; pos[i * 3 + 1] = SURF; pos[i * 3 + 2] = z; }
+  // 体の表面の点を拾って、水面近くで動いた所に光を置く（＝体の動きがそのまま光の線になる）
+  const SAMPLES = 110;
+  function stir(body, dt, gain) { if (!body || !body.g.visible) return; body.g.updateMatrixWorld(true);
+    const ms = [...body.meshes.values()]; if (!ms.length) return;
+    if (!body.__glow || body.__glow.length !== SAMPLES) { body.__glow = []; for (let i = 0; i < SAMPLES; i++) body.__glow.push({ mi: i % ms.length, vi: Math.floor(Math.random() * 1e6), x: null, y: 0, z: 0 }); }
+    const v = new THREE.Vector3();
+    for (const s of body.__glow) { const m = ms[s.mi % ms.length], A = m.geometry.attributes.position; if (!A || !A.count) continue;
+      v.fromBufferAttribute(A, s.vi % A.count).applyMatrix4(m.matrixWorld);
+      if (s.x != null && v.y < SURF + 0.32 && v.y > SURF - 1.6 && inSea(v.x, v.z)) { const sp = Math.hypot(v.x - s.x, v.z - s.z, (v.y - s.y) * 0.5) / Math.max(dt, 1e-3);
+        if (Math.random() < Math.min(1, Math.max(0, sp - 0.15) * dt * 1.6 * gain)) emit(v.x + (Math.random() - 0.5) * 0.08, v.z + (Math.random() - 0.5) * 0.08, 0.55 + Math.min(1, sp / 3) * 0.6, 1.6 + Math.random() * 1.2); }
+      s.x = v.x; s.y = v.y; s.z = v.z; } }
+  function burst(x, z, power) { const n = Math.round(50 + 160 * Math.min(1, power)); for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = (0.6 + Math.random() * 2.6) * (0.6 + power); emit(x, z, 0.9 + Math.random() * 0.6, 1.4 + Math.random() * 1.6, Math.cos(a) * sp, Math.sin(a) * sp); } }
+  function tick(dt) { night = SKY.night; pts.material.opacity = Math.min(1, night * 1.15); pts.visible = night > 0.02;
+    if (night > 0.05) {
+      for (const w of wilds) if (inSea(w.x, w.z)) stir(w.body, dt, 1.4);
+      if (mate) { if (mate !== lastMate) { lastMate = mate; prevSt = mate.st; } stir(mate.body, dt, 1);
+        if (mate.st === 'swim' && prevSt !== 'swim' && inSea(mate.x, mate.z)) burst(mate.x, mate.z, Math.min(1.4, Math.max(0.2, -prevVy / 9)) * Math.pow(mate.size, 0.5));
+        prevSt = mate.st; prevVy = mate.vy; }
+      // 波打ち際：数秒ごとに寄せる波が光る
+      waveT += dt; const ph = waveT % 4.2; if (ph < 1.1) { const k = Math.sin(ph / 1.1 * Math.PI), n = Math.round(420 * k * dt); for (let i = 0; i < n; i++) { const x = -62 + Math.random() * 124; emit(x, MAP.sea - 0.35 - Math.random() * 0.9 - ph * 0.6, 0.5 + Math.random() * 0.6, 0.9 + Math.random() * 0.8, 0, 0.35); } }
+      // ときどき沖でポツッと光る
+      const n2 = Math.random() < dt * 22 ? 1 : 0; for (let i = 0; i < n2; i++) { const a = Math.random() * 6.283, r = 6 + Math.random() * 40, x = pl.x + Math.cos(a) * r, z = pl.z + Math.sin(a) * r; if (inSea(x, z)) emit(x, z, 0.25 + Math.random() * 0.35, 0.8 + Math.random() * 1.2); }
+    }
+    live = 0;
+    for (let i = 0; i < N; i++) { const q = P[i]; if (q.L <= 0) continue; q.t += dt;
+      if (q.t >= q.L) { q.L = 0; pos[i * 3 + 1] = -999; col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0; continue; }
+      live++; if (q.vx || q.vz) { pos[i * 3] += q.vx * dt; pos[i * 3 + 2] += q.vz * dt; const d = Math.exp(-dt * 2.2); q.vx *= d; q.vz *= d; }
+      const u = q.t / q.L, e = Math.min(1, q.t / 0.08) * (1 - u) * (1 - u) * q.b;
+      col[i * 3] = 0.1 * e; col[i * 3 + 1] = 0.42 * e; col[i * 3 + 2] = 0.62 * e; }
+    geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; }
+  return { tick, burst, get live() { return live; } };
+})();
+window.__sky = SKY; window.__glow = GLOW; window.__scene = scene; window.__mate = () => mate; /* 検証用 */
 addEventListener('error', e => { const el = document.getElementById('dbg'); el.textContent = 'エラー：' + (e.message || ''); el.style.display = 'block'; });
 // はじめて来た時：ツノトカゲの設計図を渡して乗せる。前に乗ってた子がいれば、いちばん新しい作品に乗る
 { let L = loadWorks(); if (!L.length) { makeBlueprint('tokage'); L = loadWorks(); } if (L.length) setMate(L[0]); else showHelp(); }
