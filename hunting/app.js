@@ -285,6 +285,25 @@ function readMarks(body, A, kind) { if (!A || !A.len) return null; S = body.D; S
   let hold = 0, lo = 1e9; for (let f = 0; f < tk; f++) if (ry[f] < lo) { lo = ry[f]; hold = f; }
   let dn = 1, dv = -1e9; for (let f = 0; f < A.len; f++) for (const b of body.D.bones) { const a = F[f][b.id], c = F[f + 1][b.id]; if (!a || !c) continue; const v = a[a.length - 1][1] - c[c.length - 1][1]; if (v > dv) { dv = v; dn = f + 1; } }
   return { hold, takeoff: tk, upV: up * 24, down: dn, downV: dv * 24 }; }
+// 羽ばたきアニメの「羽の先の高さ」と「羽の広がり」をコマごとに測る（右パッドで指がなぞるのはこの高さ）
+function wingProf(body, A) { if (!A || !A.len) return null; S = body.D; S.anim = A; const F = []; for (let f = 0; f <= A.len; f++) F.push(poseAt(f));
+  const root = body.D.bones.find(b => b.parent == null) || body.D.bones[0], ry = F.map(P => { const p = P[root.id]; return p ? p.reduce((s, q) => s + q[1], 0) / p.length : 0; });
+  const tips = body.D.bones.map(b => { const ys = F.map((P, f) => { const p = P[b.id]; return p ? p[p.length - 1][1] - ry[f] : 0; }); return { b, ys, r: Math.max(...ys) - Math.min(...ys) }; }).sort((a, c) => c.r - a.r).slice(0, 2).filter(t => t.r > 1e-3);
+  if (!tips.length) return null;
+  const th = F.map((_, f) => tips.reduce((s, t) => s + t.ys[f], 0) / tips.length);
+  const sp = F.map((P, f) => tips.reduce((s, t) => { const p = P[t.b.id]; return s + (p ? Math.hypot(p[p.length - 1][0], p[p.length - 1][2] * 0.3) : 0); }, 0) / tips.length), sMax = Math.max(...sp, 1e-6);
+  const lo = Math.min(...th), hi = Math.max(...th); let nd = 0, top = 0; for (let f = 0; f < A.len; f++) if (th[f + 1] < th[f]) nd++; for (let f = 0; f <= A.len; f++) if (th[f] > th[top]) top = f;
+  return { th, span: sp.map(v => v / sMax), lo, hi, R: Math.max(1e-4, hi - lo), len: A.len, vRef: 24 / Math.max(1, nd), top }; }
+const wWrap = (wp, f) => ((f % wp.len) + wp.len) % wp.len;
+function wAt(wp, arr, f) { f = wWrap(wp, f); const i = Math.floor(f), t = f - i; return arr[i] + (arr[Math.min(i + 1, wp.len)] - arr[i]) * t; }
+// 指が動いた分だけ羽の高さを動かす。下へ＝コマを進める／戻す（羽が下がる方へ）。羽が下がる＝揚力（広がってるほど強い）、上がる＝抵抗
+function scrubWing(m, dpx, stroke) { const wp = m.wp; let d = dpx / stroke * wp.R, lift = 0, drag = 0, n = 0, flat = 0;
+  while (Math.abs(d) > 1e-7 && n++ < 800) { const a = wAt(wp, wp.th, m.wf), sf = wAt(wp, wp.th, m.wf + 0.1) - a, sb = wAt(wp, wp.th, m.wf - 0.1) - a;
+    if (Math.abs(sf) < 1e-7) { if (flat++ > 40) break; m.wf = wWrap(wp, m.wf + 0.1); continue; }
+    let dir, sl; if (Math.sign(sf) === Math.sign(d)) { dir = 1; sl = sf; } else if (Math.abs(sb) > 1e-7 && Math.sign(sb) === Math.sign(d)) { dir = -1; sl = sb; } else break; /* 端まで来た＝それ以上は動かん */
+    const k = Math.min(1, d / sl), open = wAt(wp, wp.span, m.wf); m.wf = wWrap(wp, m.wf + dir * 0.1 * k); d -= sl * k;
+    if (sl < 0) lift += -sl * k / wp.R * open; else drag += sl * k / wp.R * open; }
+  return { lift, drag }; }
 // ============ 野生の子（暮らしてるだけ。Eで調べると設計図） ============
 const wilds = [];
 function wildOf(kind, x, z, opt) { const d = TPL.data(kind), body = new BoneBody(d, kind === 'tsubasa' ? 0x6d93b8 : kind === 'hebi' ? 0x3f8f96 : 0x8aa05a), w = Object.assign({ kind, name: TPL.KINDS[kind].name, body, x, z, y: 0, yaw: Math.random() * 6.28, t: Math.random() * 9, ph: 0, A: animsFor(d), mode: 'wander' }, opt || {}); wilds.push(w); return w; }
@@ -346,7 +365,7 @@ function setMate(w) {
   const refA = kind ? animsFor(TPL.data(kind)) : {}, refB = kind ? new BoneBody(TPL.data(kind), 0xffffff) : null;
   mate.jm = readMarks(mate.body, mate.A.jump, kind); mate.fm = readMarks(mate.body, mate.A.flap, kind);
   if (refB) { const rj = readMarks(refB, refA.jump, kind), rf = readMarks(refB, refA.flap, kind); mate.jumpK = rj && mate.jm && rj.upV > 0 ? Math.max(0.75, Math.min(1.3, mate.jm.upV / rj.upV)) : 1; mate.flapK = rf && mate.fm && rf.downV > 0 ? Math.max(0.6, Math.min(1.4, mate.fm.downV / rf.downV)) : 1; refB.dispose(); } else { mate.jumpK = 1; mate.flapK = 1; }
-  mate.canFly = !!(mate.A.flap && mate.A.glide);
+  mate.canFly = !!(mate.A.flap && mate.A.glide); mate.wp = mate.A.flap ? wingProf(mate.body, mate.A.flap) : null; mate.wf = 0; mate.sv = 0; mate.bank = 0;
   mate.baseSize = window.BodyMotion.sizeOf(d); applyMateSize();
   pl.g.scale.setScalar(0.56);
   document.getElementById('mateBtn').textContent = '騎乗：' + w.name;
@@ -361,7 +380,8 @@ function applyMateSize() { if (!mate) return; const s = testSize || mate.baseSiz
   mate.seatY = Math.max(0.3, Math.min(top, 0.95 * s) * 0.8); mate.info = { h: Math.min(top, 0.95 * s), r: Math.max(0.18 * s, half * 1.05), power: s * s };
   const M = window.BodyMotion; mate.perfW = M.perf(s, 1, 'walk'); mate.perfR = M.perf(s, 1, 'run'); }
 function showHelp() { const fly = mate && mate.canFly;
-  document.getElementById('stat').innerHTML = mate ? '<b>WASD</b>移動・<b>Shift</b>歩く・<b>Space長押し→離す</b>でジャンプ' + (fly ? '<br>空中で<b>Space</b>＝羽ばたき（押しっぱなし＝滑空）' : '') + '<br><span style="color:#6d685f">池に入ると泳ぐ。動きは工房のアニメのまま。<b>T</b>＝時間帯（夜は海が光る）</span>'
+  document.getElementById('stat').innerHTML = mate ? '<span class="pcOnly"><b>WASD</b>移動・<b>Shift</b>歩く・<b>Space長押し→離す</b>でジャンプ' + (fly ? '<br>空中で<b>Space</b>＝羽ばたき（押しっぱなし＝滑空）・<b>A/D</b>＝旋回<br>画面の右半分を<b>上下ドラッグ</b>＝指と同じ羽ばたき' : '') + '<br>マウス右ドラッグ＝カメラ・<b>T</b>＝時間帯</span>'
+      + '<span class="touchOnly"><b>左</b>をなぞる＝移動・<b>右</b>を下に引いて離す＝ジャンプ' + (fly ? '<br>空中で<b>右を上下</b>＝羽ばたき（速く下ろすほど強い）・止める＝滑空・<b>左右</b>＝旋回' : '') + '<br>右を横になぞる＝カメラ</span>'
     : 'WASD／矢印で歩く。野生の子に近づいて<b>E</b>で調べると設計図'; }
 function renderPick() { const box = document.getElementById('pickList'), L = loadWorks(); box.innerHTML = '';
   if (!L.length) { box.innerHTML = '<div class="tag" style="padding:20px;text-align:center">工房の作品がまだない。野生の子に近づいてEで調べると設計図が手に入るで</div>'; return; }
@@ -376,7 +396,7 @@ function updBP() { let n = 0; try { n = +localStorage.getItem(BP_KEY) || 0; } ca
 window.__fieldDebug = () => ({ pl, mate, boulder, rival, wilds, setMate, applyMateSize, makeBlueprint, groundAt, setTestSize: v => { testSize = v; applyMateSize(); }, press: () => spaceDown(), release: () => spaceUp() }); /* 検証用 */
 window.__field = { refresh() { if (mate) { const w = loadWorks().find(x => x.id === mate.work.id); if (w) { const keep = { x: mate.x, z: mate.z, y: mate.y, yaw: mate.yaw }; setMate(w); Object.assign(mate, keep); } } updBP(); } };
 // ============ ⚙ 大きさと動きの調整（数値はこの端末に保存） ============
-const TUNE_ROWS = [['camH', 'カメラの高さ', 0.5, 2, 0.05], ['camD', 'カメラの距離', 0.5, 2, 0.05], ['jumpV', 'ジャンプの強さ', 3, 10, 0.1], ['gravity', '重力', 6, 30, 0.5], ['flapV', '羽ばたきの強さ', 1, 10, 0.1], ['glideSink', '滑空で落ちる速さ', 0.2, 4, 0.1], ['glideSpeed', '滑空の速さ', 2, 10, 0.1], ['swimSpeed', '泳ぐ速さ', 0.5, 5, 0.1], ['accel', '加速', 2, 20, 0.5], ['turn', '小回り', 2, 15, 0.5], ['agiExp', '大きさで鈍る効き', 0, 1.5, 0.05], ['weightExp', '大きい＝重さの壁', 0, 1.5, 0.05]];
+const TUNE_ROWS = [['camH', 'カメラの高さ', 0.5, 2, 0.05], ['camD', 'カメラの距離', 0.5, 2, 0.05], ['jumpV', 'ジャンプの強さ', 3, 10, 0.1], ['gravity', '重力', 6, 30, 0.5], ['flapV', '羽ばたきの強さ', 1, 10, 0.1], ['glideSink', '滑空で落ちる速さ', 0.2, 4, 0.1], ['glideSpeed', '滑空の速さ', 2, 10, 0.1], ['swimSpeed', '泳ぐ速さ', 0.5, 5, 0.1], ['padStroke', '羽ばたき1回の指の幅', 60, 320, 5], ['airTurn', '空中の旋回', 0.5, 4, 0.1], ['accel', '加速', 2, 20, 0.5], ['turn', '小回り', 2, 15, 0.5], ['agiExp', '大きさで鈍る効き', 0, 1.5, 0.05], ['weightExp', '大きい＝重さの壁', 0, 1.5, 0.05]];
 function buildTune() { const box = document.getElementById('tuneRows'), T = window.BodyMotion.load(); box.innerHTML = '';
   for (const [k, lb, mn, mx, st] of TUNE_ROWS) { const row = document.createElement('label'); row.innerHTML = '<span></span><input type="range"><b></b>'; row.firstChild.textContent = lb; const inp = row.querySelector('input'), out = row.querySelector('b');
     Object.assign(inp, { min: mn, max: mx, step: st, value: T[k] }); out.textContent = (+T[k]).toFixed(2); inp.oninput = () => { window.BodyMotion.set(k, +inp.value); out.textContent = (+inp.value).toFixed(2); applyMateSize(); }; box.appendChild(row); }
@@ -394,7 +414,7 @@ function turnTo(a, b, k) { let d = b - a; d = Math.atan2(Math.sin(d), Math.cos(d
 function spaceDown() { if (spaceHeld) return; spaceHeld = true; spaceEdge++; }
 function spaceUp() { if (!spaceHeld) return; spaceHeld = false; spaceUpEdge++; }
 // 別ウィンドウへ移動した時にkeyup/pointerupを受け取れず歩き続けるのを防止
-function clearMovementInput() { keys.clear(); joy = null; spaceUp(); const pad = document.getElementById('pad'); if (pad) { pad.style.display = 'none'; pad.firstChild.style.transform = ''; } }
+function clearMovementInput() { keys.clear(); joy = null; spaceUp(); padUp(); orbit = null; const pad = document.getElementById('pad'); if (pad) { pad.style.display = 'none'; pad.firstChild.style.transform = ''; } }
 window.__clearMovementInput = clearMovementInput;
 addEventListener('blur', clearMovementInput);
 addEventListener('pagehide', clearMovementInput);
@@ -406,9 +426,35 @@ addEventListener('keydown', e => { if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.t
   if (k === ' ') { e.preventDefault(); if (!e.repeat) spaceDown(); } });
 addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') spaceUp(); });
 addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') document.body.classList.add('pc'); }, true);
-canvas.addEventListener('pointerdown', e => { if (window.parent.__editorInput.intent(e) !== 'primary') return; if (e.clientX < W * 0.55) { joy = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0 }; const p = document.getElementById('pad'); p.style.display = 'block'; p.style.left = (e.clientX - 60) + 'px'; p.style.top = (e.clientY - 60) + 'px'; p.firstChild.style.transform = ''; try { canvas.setPointerCapture(e.pointerId); } catch (_) {} } });
-canvas.addEventListener('pointermove', e => { if (!joy || e.pointerId !== joy.id) return; let dx = e.clientX - joy.x, dy = e.clientY - joy.y; const L = Math.hypot(dx, dy); if (L > 50) { dx *= 50 / L; dy *= 50 / L; } joy.dx = dx / 50; joy.dy = dy / 50; document.getElementById('pad').firstChild.style.transform = `translate(${dx}px,${dy}px)`; });
-const jEnd = e => { if (joy && e.pointerId === joy.id) { joy = null; const pad = document.getElementById('pad'); pad.style.display = 'none'; pad.firstChild.style.transform = ''; } }; canvas.addEventListener('pointerup', jEnd); canvas.addEventListener('pointercancel', jEnd);
+// 左＝スティック（カメラ基準）。右＝羽ばたきパッド：空中は指の上下＝羽ばたきアニメのコマ、地上は下に引いて離す（上に弾く）＝ジャンプ、横になぞる＝カメラ
+let camYaw = Math.PI, camHold = 0; // カメラの前の向き（sin,cos）。手で回した直後はしばらく自動で回り込まない
+const rpad = { id: null, active: false, released: false, x0: 0, y0: 0, x: 0, y: 0, mode: null, pend: [], still: 0, maxY: 0, t: 0, fs: 0 };
+let orbit = null;
+const isAirSt = m => m.st === 'air' || m.st === 'flap' || m.st === 'glide' || m.st === 'wing' || (m.st === 'takeoff' && m.lifted);
+function padDown(e) { Object.assign(rpad, { id: e.pointerId, active: true, released: false, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, mode: null, pend: [], still: 0, maxY: e.clientY, t: e.timeStamp, fs: 0 });
+  if (mate && mate.canFly && mate.wp && isAirSt(mate)) rpad.mode = 'wing'; }
+function padMove(e) { const dx = e.clientX - rpad.x, dy = e.clientY - rpad.y; rpad.x = e.clientX; rpad.y = e.clientY;
+  if (!rpad.mode) { const tx = rpad.x - rpad.x0, ty = rpad.y - rpad.y0; if (Math.hypot(tx, ty) > 10) rpad.mode = Math.abs(tx) > Math.abs(ty) * 1.2 ? 'cam' : (ty > 0 ? 'jump' : 'none'); }
+  if (rpad.mode === 'cam') { camYaw -= dx * 0.007; camHold = 1.5; }
+  else if (rpad.mode === 'wing') { const te = Math.max(0.004, (e.timeStamp - rpad.t) / 1000); rpad.fs += (Math.abs(dy) / te - rpad.fs) * 0.5; if (dy) rpad.pend.push({ d: -dy, fs: rpad.fs }); if (Math.abs(dy) > 0.5) rpad.still = 0; }
+  else if (rpad.mode === 'jump') rpad.maxY = Math.max(rpad.maxY, rpad.y);
+  rpad.t = e.timeStamp; }
+function padUp() { if (!rpad.active) return; rpad.active = false; rpad.released = true; rpad.id = null; }
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => { const it = window.parent.__editorInput.intent(e);
+  if (it === 'select' || it === 'camera') { orbit = { id: e.pointerId, x: e.clientX }; try { canvas.setPointerCapture(e.pointerId); } catch (_) {} return; } /* マウス右ドラッグ＝カメラ */
+  if (it !== 'primary') return;
+  if (e.clientX < W * 0.55) { if (joy) return; joy = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0 }; const p = document.getElementById('pad'); p.style.display = 'block'; p.style.left = (e.clientX - 60) + 'px'; p.style.top = (e.clientY - 60) + 'px'; p.firstChild.style.transform = ''; }
+  else { if (rpad.active) return; padDown(e); }
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {} });
+canvas.addEventListener('pointermove', e => {
+  if (orbit && e.pointerId === orbit.id) { camYaw -= (e.clientX - orbit.x) * 0.006; orbit.x = e.clientX; camHold = 1.5; return; }
+  if (rpad.active && e.pointerId === rpad.id) { padMove(e); return; }
+  if (!joy || e.pointerId !== joy.id) return; let dx = e.clientX - joy.x, dy = e.clientY - joy.y; const L = Math.hypot(dx, dy); if (L > 50) { dx *= 50 / L; dy *= 50 / L; } joy.dx = dx / 50; joy.dy = dy / 50; document.getElementById('pad').firstChild.style.transform = `translate(${dx}px,${dy}px)`; });
+const jEnd = e => { if (orbit && e.pointerId === orbit.id) orbit = null; if (rpad.active && e.pointerId === rpad.id) padUp();
+  if (joy && e.pointerId === joy.id) { joy = null; const pad = document.getElementById('pad'); pad.style.display = 'none'; pad.firstChild.style.transform = ''; } }; canvas.addEventListener('pointerup', jEnd); canvas.addEventListener('pointercancel', jEnd);
+canvas.addEventListener('lostpointercapture', jEnd);
+addEventListener('pointerup', jEnd); canvas.addEventListener('pointercancel', jEnd);
 canvas.addEventListener('lostpointercapture', jEnd);
 addEventListener('pointerup', jEnd);
 { const jb = document.getElementById('jumpBtn'); jb.addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; try { jb.setPointerCapture(e.pointerId); } catch (_) {} spaceDown(); });
@@ -416,13 +462,23 @@ addEventListener('pointerup', jEnd);
 // ============ 相棒の動き：地上・溜め・踏み切り・空中・羽ばたき・滑空・着地・泳ぐ ============
 const FR = 24;
 function playOnce(dt, A) { const prev = mate.f; mate.f = Math.min(A.len, mate.f + dt * FR); return prev; }
-function stepMate(dt, mx, mz, ml, moving, walking) { const m = mate, T = window.BodyMotion.load(), A = m.A, pressed = spaceEdge > 0, released = spaceUpEdge > 0; spaceEdge = 0; spaceUpEdge = 0;
-  const air = m.st === 'air' || m.st === 'flap' || m.st === 'glide' || (m.st === 'takeoff' && m.lifted);
+function stepMate(dt, mx, mz, ml, moving, walking, rx, rz) { const m = mate, T = window.BodyMotion.load(), A = m.A, pressed = spaceEdge > 0, released = spaceUpEdge > 0; spaceEdge = 0; spaceUpEdge = 0;
+  const padRel = rpad.released; rpad.released = false; m.gl = false; m.lift = 0;
+  // ---- 右パッド：地上は下に引いて溜め、離す／上に弾くと踏み切り（溜めの深さ＝強さ） ----
+  if (rpad.mode === 'jump' && (rpad.active || padRel)) { const depth = Math.max(0, Math.min(1, (rpad.maxY - rpad.y0) / 70)), cur = Math.max(0, Math.min(1, (rpad.y - rpad.y0) / 70)), flick = rpad.maxY - rpad.y > 24;
+    if ((m.st === 'ground' || m.st === 'swim' || m.st === 'land') && rpad.active && cur > 0.05) { if (A.jump && m.jm) { m.st = 'charge'; m.padJ = true; m.f = 0; m.lifted = false; } }
+    if (m.st === 'charge' && m.padJ) { m.f = Math.min(m.jm.hold, cur * m.jm.hold); if (!rpad.active || flick) { m.st = 'takeoff'; m.f = Math.max(m.f, Math.min(m.jm.hold, depth * m.jm.hold)); m.jpow = 0.55 + 0.45 * depth; m.padJ = false; if (rpad.active) { rpad.mode = 'wing'; rpad.pend = []; } } }
+    else if (!A.jump && (m.st === 'ground' || m.st === 'swim') && (padRel || flick) && depth > 0.2) { m.vy = T.jumpV * (0.55 + 0.45 * depth); m.y += 0.02; m.st = 'air'; m.lifted = true; m.airT = 0; if (rpad.active) { rpad.mode = 'wing'; rpad.pend = []; } } }
+  // ---- 右パッド：空中で指を当てている間は「羽ばたきパッド」 ----
+  if (m.canFly && m.wp && rpad.active && rpad.mode !== 'cam' && isAirSt(m) && m.st !== 'wing' && !(m.st === 'takeoff' && m.f < A.jump.len)) { m.wf = m.st === 'flap' ? Math.min(m.f, m.wp.len) : m.wp.top; m.st = 'wing'; rpad.mode = 'wing'; rpad.pend = []; rpad.still = 0; rpad.railTop = rpad.y - (1 - (wAt(m.wp, m.wp.th, m.wf) - m.wp.lo) / m.wp.R) * T.padStroke; }
+  if (m.st === 'wing' && !rpad.active) { m.st = 'air'; m.airT = 0; }
+  const air = isAirSt(m);
+  if (m.st !== 'wing' && rpad.pend.length) rpad.pend.length = 0; /* 羽ばたき中以外の指の動きは捨てる */
   // ---- 状態の切りかえ ----
   if ((m.st === 'ground' || m.st === 'swim' || m.st === 'land') && pressed) { if (A.jump && m.jm) { m.st = 'charge'; m.f = 0; m.lifted = false; } else { m.vy = T.jumpV; m.y += 0.02; m.st = 'air'; m.lifted = true; } }
-  else if (m.st === 'charge') { m.f = Math.min(m.jm.hold, m.f + dt * FR); if (released || !spaceHeld) { m.st = 'takeoff'; m.f = Math.max(m.f, m.jm.hold); } }
-  else if (m.st === 'takeoff') { const prev = playOnce(dt, A.jump); if (!m.lifted && prev < m.jm.takeoff && m.f >= m.jm.takeoff) { m.vy = T.jumpV * m.jumpK; m.y += 0.02; m.lifted = true; }
-    if (m.f >= A.jump.len) { if (!m.lifted) { m.vy = T.jumpV * m.jumpK; m.y += 0.02; m.lifted = true; } m.st = 'air'; m.airT = 0; }
+  else if (m.st === 'charge' && !m.padJ) { m.f = Math.min(m.jm.hold, m.f + dt * FR); if (released || !spaceHeld) { m.st = 'takeoff'; m.f = Math.max(m.f, m.jm.hold); m.jpow = 1; } }
+  else if (m.st === 'takeoff') { const prev = playOnce(dt, A.jump); if (!m.lifted && prev < m.jm.takeoff && m.f >= m.jm.takeoff) { m.vy = T.jumpV * m.jumpK * (m.jpow || 1); m.y += 0.02; m.lifted = true; }
+    if (m.f >= A.jump.len) { if (!m.lifted) { m.vy = T.jumpV * m.jumpK * (m.jpow || 1); m.y += 0.02; m.lifted = true; } m.st = 'air'; m.airT = 0; }
     if (m.lifted && pressed && m.canFly) { m.st = 'flap'; m.f = 0; m.flapped = false; } }
   else if (m.st === 'air') { m.airT += dt; if (m.canFly && pressed) { m.st = 'flap'; m.f = 0; m.flapped = false; } else if (m.canFly && spaceHeld && m.vy < 0.6) m.st = 'glide'; }
   else if (m.st === 'flap') { const prev = playOnce(dt, A.flap); if (!m.flapped && prev < m.fm.down && m.f >= m.fm.down) { m.vy = Math.max(m.vy, 0) * 0.35 + T.flapV * m.flapK * BIRD.flap(m); m.flapped = true; }
@@ -430,21 +486,36 @@ function stepMate(dt, mx, mz, ml, moving, walking) { const m = mate, T = window.
     else if (m.f >= A.flap.len) { m.st = spaceHeld && A.glide ? 'glide' : 'air'; m.airT = 0; } }
   else if (m.st === 'glide') { if (pressed) { m.st = 'flap'; m.f = 0; m.flapped = false; } else if (!spaceHeld) { m.st = 'air'; m.airT = 0; } }
   else if (m.st === 'land') { playOnce(dt, A.land); if (m.f >= A.land.len) m.st = 'ground'; }
-  // ---- 横の動き（勢いつき。空中は鈍い、滑空は前へ滑る） ----
-  const P = walking ? m.perfW : m.perfR, inAir = m.st === 'air' || m.st === 'flap' || m.st === 'glide' || (m.st === 'takeoff' && m.lifted), ctl = inAir ? (m.st === 'glide' ? 0.7 : 0.4) : 1;
-  let top = P.top; if (m.st === 'swim') top = T.swimSpeed * Math.pow(m.size, 0.3); if (m.st === 'charge') top *= 0.25; if (m.st === 'land') top *= 0.45; if (m.st === 'glide') top = Math.max(P.top, T.glideSpeed);
+  // ---- 羽ばたきパッド：指で動かした分だけ羽が動く。速く下ろすほど強い。指を止めたら、そのコマの広がりで滑空 ----
+  let wingOpen = 0;
+  if (m.st === 'wing') { rpad.still += dt; const up = T.flapV * m.flapK, ref = T.padStroke * m.wp.vRef * 0.6; let L = 0, Dg = 0, Lw = 0;
+    for (const seg of rpad.pend) { const r = scrubWing(m, seg.d, T.padStroke), sf = Math.max(0.35, Math.min(1.7, seg.fs / ref)); L += r.lift; Lw += r.lift * sf; Dg += r.drag * sf; } /* 指の速さ（お手本アニメの振りの速さが基準）で強さが変わる */
+    rpad.pend = [];
+    const stam = L > 0 ? BIRD.spend(L) : 1;
+    if (L > 0) { m.vy *= m.vy < 0 ? 1 - Math.min(1, L * 1.2) : 1 - Math.min(0.9, L * 0.65); m.vy += up * Lw * stam; m.v += Lw * stam * 1.6; m.lift = Lw * stam / Math.max(dt, 1e-3); }
+    if (Dg > 0) m.vy -= up * Dg * 0.15;
+    m.vy = Math.min(m.vy, up * 2.2);
+    wingOpen = wAt(m.wp, m.wp.span, m.wf); if (rpad.still > 0.15) m.gl = true; }
+  // ---- 横の動き（勢いつき。空中は鈍い、滑空は前へ滑る。飛べる子は空中で左右＝旋回） ----
+  const P = walking ? m.perfW : m.perfR, inAir = isAirSt(m), gliding = m.st === 'glide' || m.gl, ctl = inAir ? (gliding ? 0.7 : 0.4) : 1;
+  let top = P.top; if (m.st === 'swim') top = T.swimSpeed * Math.pow(m.size, 0.3); if (m.st === 'charge') top *= 0.25; if (m.st === 'land') top *= 0.45; if (gliding) top = Math.max(P.top, T.glideSpeed); if (m.st === 'wing') top = Math.max(top, P.top * 1.3);
   let target = 0;
-  if (moving) { const want = Math.atan2(mx, mz), diff = Math.atan2(Math.sin(want - m.yaw), Math.cos(want - m.yaw)), rate = P.turn * ctl * (1 - 0.5 * Math.min(1, m.v / Math.max(0.1, top)));
-    m.yaw += Math.max(-rate * dt, Math.min(rate * dt, diff)); target = top * Math.min(1, ml) * Math.max(0, Math.cos(diff)); }
+  const flying = m.canFly && inAir;
+  if (flying) { const fwd = -(rz || 0), turnR = T.airTurn * Math.pow(m.size, -0.3); m.yaw -= (rx || 0) * turnR * dt; m.bank += (-(rx || 0) * 0.45 - m.bank) * Math.min(1, dt * 5);
+    target = fwd > 0.15 ? top * Math.min(1, fwd) : fwd < -0.15 ? 0 : m.v; } /* 前に倒す＝加速、後ろ＝ブレーキ、離す＝そのまま */
+  else { m.bank += (0 - m.bank) * Math.min(1, dt * 6);
+    if (moving) { const want = Math.atan2(mx, mz), diff = Math.atan2(Math.sin(want - m.yaw), Math.cos(want - m.yaw)), rate = P.turn * ctl * (1 - 0.5 * Math.min(1, m.v / Math.max(0.1, top)));
+      m.yaw += Math.max(-rate * dt, Math.min(rate * dt, diff)); target = top * Math.min(1, ml) * Math.max(0, Math.cos(diff)); } }
   if (m.st === 'glide') target = Math.max(target, top * 0.8); /* 滑空中は止まれへん */
-  const dv = target - m.v, acc = (dv > 0 ? P.accel : P.brake) * (inAir ? (m.st === 'glide' ? 0.5 : 0.25) : 1); m.v += Math.sign(dv) * Math.min(Math.abs(dv), acc * dt);
+  if (m.gl) target = Math.max(target, top * 0.8 * (0.4 + 0.6 * wingOpen));
+  const dv = target - m.v, acc = (dv > 0 ? P.accel : P.brake) * (inAir ? (gliding ? 0.5 : 0.25) : 1); m.v += Math.sign(dv) * Math.min(Math.abs(dv), acc * dt);
   m.x += Math.sin(m.yaw) * m.v * dt; m.z += Math.cos(m.yaw) * m.v * dt;
   const bump = (nx, nz) => { const into = -(Math.sin(m.yaw) * nx + Math.cos(m.yaw) * nz); if (into <= 0.05) return; if (m.v > 2.6 && into > 0.55) pop(new THREE.Vector3(m.x, m.y + m.info.h + 0.3, m.z), 'ゴン！', '#fff', 16 + m.size * 6); m.v *= 1 - into * 0.85; };
   if (touchBoulder(m, m.info.r, m.info, bump)) m.v = Math.min(m.v, 1.4);
   collide(m, m.info.r, m.info, bump); holeHint(m, m.info);
   // ---- 縦の動き ----
   const g0 = groundAt(m.x, m.z, m.y);
-  if (inAir) { const vy0 = m.vy; m.vy -= T.gravity * dt; const up = liftAt(m.x, m.z, m.y); if (up) m.vy = Math.min(m.vy + (T.gravity + up) * dt, Math.max(vy0, UP_MAX)); if (m.st === 'glide') m.vy = Math.max(m.vy, -T.glideSink); m.y += m.vy * dt;
+  if (inAir) { const vy0 = m.vy; m.vy -= T.gravity * dt; const up = liftAt(m.x, m.z, m.y); if (up) m.vy = Math.min(m.vy + (T.gravity + up) * dt, Math.max(vy0, UP_MAX)); if (m.st === 'glide') m.vy = Math.max(m.vy, -T.glideSink); if (m.gl) m.vy = Math.max(m.vy, -T.glideSink / (0.3 + 0.7 * wingOpen)); m.y += m.vy * dt;
     if (m.vy < 0 && m.y <= g0) { m.y = g0; m.vy = 0; const hard = -vy0 > 3.5; m.lifted = false; m.st = hard && A.land ? 'land' : (inWater(m.x, m.z) && g0 < 0.05 ? 'swim' : 'ground'); m.f = 0; } }
   else if (m.st !== 'takeoff' || !m.lifted) { if (g0 < m.y - 0.05 && m.st !== 'charge') { m.st = 'air'; m.vy = 0; m.lifted = true; m.airT = 0; } else m.y = g0;
     if ((m.st === 'ground' || m.st === 'land') && inWater(m.x, m.z) && m.y < 0.05 && (m.st === 'ground' || m.f >= (A.land ? A.land.len : 0))) m.st = 'swim'; else if (m.st === 'swim' && !(inWater(m.x, m.z) && m.y < 0.05)) m.st = 'ground'; }
@@ -456,11 +527,12 @@ function stepMate(dt, mx, mz, ml, moving, walking) { const m = mate, T = window.
   else if (m.st === 'swim') { const S2 = A.swim || A.walk; if (S2) { m.ph = (m.ph + Math.max(0.35, Math.min(sp / 0.4, 2.2)) * dt) % 1; bodyFrame(m.body, S2, m.ph * S2.len); } }
   else if (m.st === 'charge' || m.st === 'takeoff') bodyFrame(m.body, A.jump, m.f);
   else if (m.st === 'flap') bodyFrame(m.body, A.flap, m.f);
+  else if (m.st === 'wing') bodyFrame(m.body, A.flap, m.wf);
   else if (m.st === 'land') bodyFrame(m.body, A.land, m.f);
   else if (m.st === 'glide' && A.glide) { m.ph = (m.ph + dt * FR / A.glide.len) % 1; bodyFrame(m.body, A.glide, m.ph * A.glide.len); }
   else if (m.st === 'air') { if (A.fall) { m.ph = (m.ph + dt * FR / A.fall.len) % 1; bodyFrame(m.body, A.fall, m.ph * A.fall.len); } else if (A.jump) bodyFrame(m.body, A.jump, A.jump.len); }
   const bob = m.st === 'swim' ? -0.12 * m.size + Math.sin(performance.now() / 300) * 0.02 : 0;
-  m.body.g.position.set(m.x, m.y + bob, m.z); m.body.g.rotation.y = m.yaw;
+  m.body.g.position.set(m.x, m.y + bob, m.z); m.body.g.rotation.set(0, m.yaw, m.bank || 0);
   pl.x = m.x; pl.z = m.z; pl.y = m.y + bob; pl.yaw = m.yaw; }
 // 影（空中で高さが分かるように）
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })); shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
@@ -479,9 +551,10 @@ function step(now) {
   if (keys.has('a') || keys.has('arrowleft')) mx -= 1;
   if (keys.has('d') || keys.has('arrowright')) mx += 1;
   if (joy) { mx += joy.dx; mz += joy.dy; }
+  const rx = mx, rz = mz, cs = Math.sin(camYaw), cc = Math.cos(camYaw); mx = -cs * rz - cc * rx; mz = -cc * rz + cs * rx; /* カメラの向き基準 */
   const ml = Math.hypot(mx, mz), moving = ml > 0.1, walking = keys.has('shift');
-  if (mate) stepMate(dt, mx, mz, ml, moving, walking);
-  else { spaceEdge = 0; spaceUpEdge = 0; if (moving) { const sp = Math.min(1, ml) * 3.4; pl.x += mx / ml * sp * dt; pl.z += mz / ml * sp * dt; pl.yaw = Math.atan2(mx, mz); }
+  if (mate) stepMate(dt, mx, mz, ml, moving, walking, rx, rz);
+  else { spaceEdge = 0; spaceUpEdge = 0; rpad.released = false; rpad.pend.length = 0; if (moving) { const sp = Math.min(1, ml) * 3.4; pl.x += mx / ml * sp * dt; pl.z += mz / ml * sp * dt; pl.yaw = Math.atan2(mx, mz); }
     const me = { h: 1.5, r: 0.3, power: 0.3 }; touchBoulder(pl, me.r, me); collide(pl, me.r, me); holeHint(pl, me); pl.y = groundAt(pl.x, pl.z, pl.y); }
   pl.g.position.set(pl.x, mate ? pl.y + mate.seatY : pl.y + (moving ? Math.abs(Math.sin(now / 90)) * 0.05 : 0), pl.z);
   pl.g.rotation.y = pl.yaw;
@@ -490,12 +563,21 @@ function step(now) {
   BIRD.tick(dt);
   SKY.tick(dt); GLOW.tick(dt);
   { const g = groundAt(pl.x, pl.z, pl.y + 0.01), h = Math.max(0, pl.y - g), s = (mate ? mate.info.r * 2.2 : 0.7); shadow.position.set(pl.x, g + 0.03, pl.z); shadow.scale.setScalar(s * (1 + h * 0.08)); shadow.material.opacity = Math.max(0.05, 0.25 - h * 0.025); shadow.visible = !(mate && mate.st === 'swim'); }
+  // 右パッドの目印：空中＝羽の高さ（光る＝揚力が出てる、黄色＝滑空）、地上＝溜めの深さ
+  { const el = document.getElementById('wpad'), wing = rpad.active && mate && mate.st === 'wing' && mate.wp, jmp = rpad.active && rpad.mode === 'jump';
+    el.style.display = wing || jmp ? 'block' : 'none';
+    if (wing) { const H = window.BodyMotion.load().padStroke, hn = (wAt(mate.wp, mate.wp.th, mate.wf) - mate.wp.lo) / mate.wp.R; el.className = mate.lift > 0.4 ? 'lift' : mate.gl ? 'glide' : ''; el.style.height = H + 'px'; el.style.left = (rpad.x0 - 15) + 'px'; el.style.top = rpad.railTop + 'px'; el.firstChild.style.top = ((1 - hn) * H) + 'px'; }
+    else if (jmp) { const H = 90; el.className = 'jump'; el.style.height = H + 'px'; el.style.left = (rpad.x0 - 15) + 'px'; el.style.top = (rpad.y0 - 10) + 'px'; el.firstChild.style.top = (10 + Math.max(0, Math.min(70, rpad.y - rpad.y0))) + 'px'; } }
   // ボタン：キャンプ＝工房、野生の子の近く＝調べる
   { const c = inCamp(pl.x, pl.z, pl.y), bn = !c && BIRD.near(), nw = !c && !bn && pl.y < 0.6 && nearWild(); document.getElementById('campBtn').style.display = c ? 'block' : 'none'; document.getElementById('birdBtn').style.display = bn ? 'block' : 'none'; const lb = document.getElementById('lookBtn'); lb.style.display = nw ? 'block' : 'none'; if (nw) lb.firstChild.textContent = '🔍 ' + nw.name + 'を調べる'; }
   // カメラ：乗り手の後ろ斜め上・低め。大きい子ほど高く引き、小さい子ほど地面すれすれに寄る。高さにも付いていく
   { const T = window.BodyMotion.load(), k = Math.max(1, 1.25 / Math.max(0.45, W / H)), want = mate ? Math.pow(mate.size, 0.75) : 0.85;
     camS = camS == null ? want : camS + (want - camS) * (1 - Math.exp(-dt * 3)); const c = camS, a = 1 - Math.exp(-dt * 7), yy = pl.y;
-    const P = new THREE.Vector3(pl.x, yy + 3.0 * c * T.camH, pl.z + 5.6 * c * T.camD * k), L = new THREE.Vector3(pl.x, yy + 0.55 * c, pl.z - 2.2 * c);
+    if (camHold > 0) camHold -= dt;
+    if (mate && mate.canFly && isAirSt(mate)) camYaw = turnTo(camYaw, mate.yaw, dt * 4); /* 飛んでる間は背中固定 */
+    else if (camHold <= 0) { const yw = mate ? mate.yaw : pl.yaw, spd = mate ? Math.min(1, mate.v / Math.max(0.5, mate.perfR.top)) : (moving ? 1 : 0), dd = Math.atan2(Math.sin(yw - camYaw), Math.cos(yw - camYaw)), w = Math.max(0, (Math.cos(dd) + 0.3) / 1.3); camYaw = turnTo(camYaw, yw, dt * 1.6 * w * spd); } /* 進むとゆっくり背中側へ */
+    const fx = Math.sin(camYaw), fz = Math.cos(camYaw), D = 5.6 * c * T.camD * k;
+    const P = new THREE.Vector3(pl.x - fx * D, yy + 3.0 * c * T.camH, pl.z - fz * D), L = new THREE.Vector3(pl.x + fx * 2.2 * c, yy + 0.55 * c, pl.z + fz * 2.2 * c);
     if (!camPos) { camPos = P.clone(); camLook = L.clone(); } else { camPos.lerp(P, a); camLook.lerp(L, a); }
     const eye = camClamp(new THREE.Vector3(pl.x, yy + Math.max(0.5, (mate ? mate.seatY : 1) + 0.3), pl.z), camPos.clone());
     if (!camEye) camEye = eye.clone(); else camEye.lerp(eye, 1 - Math.exp(-dt * 5));
@@ -525,11 +607,11 @@ const BIRD = (() => {
   function save(d) { const B = load(); B.w = B.w || {}; const id = mate.work.id, nb = d > (B.w[id] || 0) + 0.05; if (nb) B.w[id] = d; if (!B.all || d > B.all.d) B.all = { d, name: mate.work.name }; try { localStorage.setItem(KEY, JSON.stringify(B)); } catch (_) {} return nb; }
   function placeBest() { bestNow = bestOf(); flag.visible = bestNow > 0.5; dropLabel(bestSp); bestSp = null; if (!flag.visible) return; flag.position.set(0, 0, VENUE.edge - bestNow); bestSp = label('ベスト ' + bestNow.toFixed(1) + 'm', { size: 0.8, bg: '#d9572b', col: '#fff' }); bestSp.position.set(-13.5, 5, 0); flag.add(bestSp); }
   const cost = () => 12 * Math.pow(mate ? mate.size : 1, 1.3); // 体が大きいほど1回が重い
-  const air = m => m.st === 'air' || m.st === 'flap' || m.st === 'glide' || m.st === 'charge' || (m.st === 'takeoff' && m.lifted);
+  const air = m => isAirSt(m) || m.st === 'charge';
   const near = () => (st === 'off' || st === 'done') && pl.y > VENUE.h - 0.6 && Math.hypot(pl.x - VENUE.booth.x, pl.z - VENUE.booth.z) < 3;
-  function help(on) { if (!on) { showHelp(); return; } document.getElementById('stat').innerHTML = '<b>鳥人間</b>：桟橋の先まで走って飛び出す<br>空中で<b>Space</b>＝羽ばたき（スタミナを使う）・押しっぱなし＝滑空（タダ）<br>白い柱＝上昇気流（タダでのぼる）・金の輪＝スタミナ回復・<b>R</b>＝やり直し'; }
+  function help(on) { if (!on) { showHelp(); return; } document.getElementById('stat').innerHTML = '<b>鳥人間</b>：桟橋の先まで走って飛び出す<br>空中で<b>右を上下</b>＝羽ばたき（速く下ろすほど強い・スタミナを使う）・指を止める＝広げたコマで滑空（タダ）<span class="pcOnly">・<b>Space</b>でもOK</span><br>左右＝旋回・白い柱＝上昇気流・金の輪＝スタミナ回復・<b>R</b>＝やり直し'; }
   function start() { if (!mate) { msg('相棒に乗ってから出よう'); return; } clearMovementInput(); st = 'ready'; stam = MAXS; dist = 0; landAt = null; resetRings(); res.classList.remove('show'); who = mate;
-    Object.assign(mate, { x: VENUE.start.x, z: VENUE.start.z, y: VENUE.h, vy: 0, v: 0, yaw: Math.PI, st: 'ground', f: 0, lifted: false }); pl.x = mate.x; pl.z = mate.z; pl.y = mate.y; pl.yaw = Math.PI; camPos = null; camEye = null;
+    Object.assign(mate, { x: VENUE.start.x, z: VENUE.start.z, y: VENUE.h, vy: 0, v: 0, yaw: Math.PI, st: 'ground', f: 0, lifted: false }); pl.x = mate.x; pl.z = mate.z; pl.y = mate.y; pl.yaw = Math.PI; camPos = null; camEye = null; camYaw = Math.PI; camHold = 0;
     placeBest(); hud.classList.add('show'); help(true); draw(); msg(mate.canFly ? '桟橋の先から飛び出せ！' : '飛べへん子やけど…いったれ！'); }
   function off() { st = 'off'; hud.classList.remove('show'); res.classList.remove('show'); help(false); }
   function end() { st = 'done'; landAt = { x: mate.x, z: mate.z }; const prev = bestNow, nb = save(dist); hud.classList.remove('show'); help(false);
@@ -539,6 +621,9 @@ const BIRD = (() => {
     res.classList.toggle('nb', nb); res.classList.add('show'); placeBest(); }
   function again() { if (!mate || st === 'off' && !(landAt && Math.hypot(pl.x - landAt.x, pl.z - landAt.z) < 40)) return; start(); } // 着いた所の近くならRで会場へ一瞬で戻る
   function flap() { if (st !== 'ready' && st !== 'fly') return 1; const c = cost(); if (stam >= c) { stam -= c; return 1; } const k = stam / c; stam = 0; if (mate) pop(new THREE.Vector3(mate.x, mate.y + mate.info.h + 0.4, mate.z), 'ヘトヘト…', '#ffd6c9', 16); return k * 0.6; }
+  let tiredT = 0; // 右パッドの羽ばたき：下ろした分（q＝1で1回分）だけスタミナを使う
+  function spend(q) { if (st !== 'ready' && st !== 'fly') return 1; const c = cost() * q; if (stam >= c) { stam -= c; return 1; } const k = c > 0 ? stam / c : 0; stam = 0;
+    if (mate && performance.now() - tiredT > 900) { tiredT = performance.now(); pop(new THREE.Vector3(mate.x, mate.y + mate.info.h + 0.4, mate.z), 'ヘトヘト…', '#ffd6c9', 16); } return k * 0.6; }
   function draw() { document.getElementById('bD').textContent = dist.toFixed(1); const over = bestNow > 0.5 && dist > bestNow;
     document.getElementById('bB').textContent = bestNow > 0.5 ? (over ? 'ベスト更新中！（' + bestNow.toFixed(1) + 'm）' : 'ベスト ' + bestNow.toFixed(1) + 'm') : 'ベスト まだなし';
     hud.classList.toggle('over', over); hud.classList.toggle('low', stam < cost()); document.getElementById('bS').style.width = (stam / MAXS * 100) + '%'; }
@@ -558,7 +643,7 @@ const BIRD = (() => {
   document.getElementById('birdBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; start(); });
   document.getElementById('rAgain').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; start(); });
   document.getElementById('rSwim').addEventListener('pointerdown', e => { e.preventDefault(); res.classList.remove('show'); st = 'off'; });
-  return { near, start, again, flap, tick, off, get st() { return st; }, get stam() { return stam; }, get dist() { return dist; }, rings, UPDRAFTS };
+  return { near, start, again, flap, spend, tick, off, get st() { return st; }, get stam() { return stam; }, get dist() { return dist; }, rings, UPDRAFTS };
 })();
 window.__bird = BIRD; /* 検証用 */
 // ============ 時間帯：朝→昼→夕方→夜 がゆっくり回る。右上の時計ボタン（T）で次の時間帯へ早回し ============
@@ -651,7 +736,7 @@ const GLOW = (() => {
     geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; }
   return { tick, burst, get live() { return live; } };
 })();
-window.__sky = SKY; window.__glow = GLOW; window.__scene = scene; window.__mate = () => mate; /* 検証用 */
+window.__sky = SKY; window.__glow = GLOW; window.__pad = () => ({ rpad, camYaw, scrubWing, wAt }); window.__scene = scene; window.__mate = () => mate; /* 検証用 */
 addEventListener('error', e => { const el = document.getElementById('dbg'); el.textContent = 'エラー：' + (e.message || ''); el.style.display = 'block'; });
 // はじめて来た時：ツノトカゲの設計図を渡して乗せる。前に乗ってた子がいれば、いちばん新しい作品に乗る
 { let L = loadWorks(); if (!L.length) { makeBlueprint('tokage'); L = loadWorks(); } if (L.length) setMate(L[0]); else showHelp(); }

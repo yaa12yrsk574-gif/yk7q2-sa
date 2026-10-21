@@ -41,3 +41,11 @@
   #birdRes { position:fixed; left:50%; top:104px; transform:translateX(-50%); z-index:21; display:none; flex-direction:column; align-items:center; gap:8px; background:#faf7f1; border:1.5px solid var(--line); border-radius:16px; padding:12px 18px; box-shadow:0 4px 15px #0002; text-align:center; }
   #birdRes.show { display:flex; } #birdRes .t { font-size:22px; font-weight:900; } #birdRes.nb .t { color:var(--acc); }
   #birdRes .r { font-size:15px; font-weight:800; line-height:1.6; } #birdRes .row { display:flex; gap:8px; align-items:center; }
+
+  /* タッチ／PCの出し分け */
+  body.pc .touchOnly { display:none; } body:not(.pc) .pcOnly { display:none; } body:not(.pc) #act { display:none; }
+  /* 右の羽ばたきパッド */
+  #wpad { position:fixed; width:30px; border-radius:15px; border:2px solid rgba(255,255,255,.55); background:rgba(43,42,39,.18); display:none; z-index:4; pointer-events:none; }
+  #wpad b { position:absolute; left:50%; width:40px; height:40px; margin:-20px; border-radius:50%; background:rgba(255,255,255,.75); box-shadow:0 0 0 2px rgba(43,42,39,.35); transition:background .08s; }
+  #wpad.lift b { background:#7fd6ff; box-shadow:0 0 14px #7fd6ff; } #wpad.glide b { background:#ffe9a8; }
+  #wpad.jump b { background:#ffb27a; }
