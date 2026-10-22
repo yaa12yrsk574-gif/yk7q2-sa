@@ -50,22 +50,30 @@
     if (quick) img.src = quick;
     ui.addEventListener('touchstart', e => { if (e.target === cv) e.preventDefault(); }, { passive: false }); ui.addEventListener('touchmove', e => { if (e.target === cv) e.preventDefault(); }, { passive: false }); /* iPadの手書き認識などで待たされんように */
     const dpr = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); const x = cv.getContext('2d', { desynchronized: true }); x.scale(dpr, dpr); x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#ff2a1a';
-    const strokes = []; let cur = null;
-    const redraw = () => { x.clearRect(0, 0, innerWidth, innerHeight); for (const s of strokes) { for (let n = 2; n <= s.length; n++) seg(s.slice(0, n)); } };
-    cv.addEventListener('pointerdown', e => { e.preventDefault(); cur = [[e.clientX, e.clientY, e.pressure || 0.5]]; strokes.push(cur); try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
-    const lv = document.createElement('canvas'); lv.width = cv.width; lv.height = cv.height; lv.style.pointerEvents = 'none'; ui.insertBefore(lv, cv.nextSibling); const lx = lv.getContext('2d'); lx.scale(dpr, dpr); lx.lineCap = 'round'; lx.strokeStyle = 'rgba(255,42,26,.55)';
+    const strokes = []; let cur = null, erase = false; /* strokes：{ e:消しゴムか, p:[[x,y,筆圧]...] } */
     const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    const seg = s => { const n = s.length; if (n < 2) return; const a = s[n - 2], b = s[n - 1], p0 = n > 2 ? mid(s[n - 3], a) : a, p1 = mid(a, b); x.lineWidth = 3 + 5 * b[2]; x.beginPath(); x.moveTo(p0[0], p0[1]); x.quadraticCurveTo(a[0], a[1], p1[0], p1[1]); x.stroke(); }; /* 足した所だけ、なめらかに */
-    cv.addEventListener('pointermove', e => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) { cur.push([ev.clientX, ev.clientY, ev.pressure || 0.5]); seg(cur); }
-      lx.clearRect(0, 0, innerWidth, innerHeight); const pr = e.getPredictedEvents ? e.getPredictedEvents() : []; if (pr.length) { const l = cur[cur.length - 1]; lx.lineWidth = 3 + 5 * l[2]; lx.beginPath(); lx.moveTo(l[0], l[1]); for (const q of pr) lx.lineTo(q.clientX, q.clientY); lx.stroke(); } }); /* 先読み分を薄く出して遅れを感じさせない */
-    const end = () => { if (cur && cur.length > 1) { const l = cur[cur.length - 1], m = mid(cur[cur.length - 2], l); x.lineWidth = 3 + 5 * l[2]; x.beginPath(); x.moveTo(m[0], m[1]); x.lineTo(l[0], l[1]); x.stroke(); } cur = null; lx.clearRect(0, 0, innerWidth, innerHeight); }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    const W0 = (s, b) => s.e ? 26 : 3 + 5 * b[2];
+    const seg = (s, n) => { const P = s.p; if (n < 2) return; const a = P[n - 2], b = P[n - 1], p0 = n > 2 ? mid(P[n - 3], a) : a, p1 = mid(a, b); x.globalCompositeOperation = s.e ? 'destination-out' : 'source-over'; x.lineWidth = W0(s, b); x.beginPath(); x.moveTo(p0[0], p0[1]); x.quadraticCurveTo(a[0], a[1], p1[0], p1[1]); x.stroke(); }; /* 足した所だけ、なめらかに */
+    const tail = s => { const P = s.p, n = P.length; x.globalCompositeOperation = s.e ? 'destination-out' : 'source-over'; if (n === 1) { x.fillStyle = '#ff2a1a'; x.beginPath(); x.arc(P[0][0], P[0][1], W0(s, P[0]) / 2, 0, 7); x.fill(); return; } const l = P[n - 1], m = mid(P[n - 2], l); x.lineWidth = W0(s, l); x.beginPath(); x.moveTo(m[0], m[1]); x.lineTo(l[0], l[1]); x.stroke(); };
+    const redraw = () => { x.globalCompositeOperation = 'source-over'; x.clearRect(0, 0, innerWidth, innerHeight); for (const s of strokes) { for (let n = 2; n <= s.p.length; n++) seg(s, n); tail(s); } x.globalCompositeOperation = 'source-over'; };
+    const ring = document.createElement('div'); ring.style.cssText = 'position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border:1.5px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #0006;pointer-events:none;display:none'; ui.appendChild(ring); /* 消しゴムの当たる範囲 */
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); cur = { e: erase, p: [[e.clientX, e.clientY, e.pressure || 0.5]] }; strokes.push(cur); if (erase) { ring.style.display = 'block'; ring.style.left = e.clientX + 'px'; ring.style.top = e.clientY + 'px'; } try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+    const lv = document.createElement('canvas'); lv.width = cv.width; lv.height = cv.height; lv.style.pointerEvents = 'none'; ui.insertBefore(lv, cv.nextSibling); const lx = lv.getContext('2d'); lx.scale(dpr, dpr); lx.lineCap = 'round'; lx.strokeStyle = 'rgba(255,42,26,.55)';
+    cv.addEventListener('pointermove', e => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) { cur.p.push([ev.clientX, ev.clientY, ev.pressure || 0.5]); seg(cur, cur.p.length); }
+      if (cur.e) { ring.style.left = e.clientX + 'px'; ring.style.top = e.clientY + 'px'; return; }
+      lx.clearRect(0, 0, innerWidth, innerHeight); const pr = e.getPredictedEvents ? e.getPredictedEvents() : []; if (pr.length) { const l = cur.p[cur.p.length - 1]; lx.lineWidth = 3 + 5 * l[2]; lx.beginPath(); lx.moveTo(l[0], l[1]); for (const q of pr) lx.lineTo(q.clientX, q.clientY); lx.stroke(); } }); /* 先読み分を薄く出して遅れを感じさせない */
+    const end = () => { if (cur) tail(cur); x.globalCompositeOperation = 'source-over'; cur = null; ring.style.display = 'none'; lx.clearRect(0, 0, innerWidth, innerHeight); }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     const tags = new Set();
     const mk = (t, cls, fn) => { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.onclick = fn; bar.appendChild(b); return b; };
     const close = () => { ui.remove(); try { tw.__paused = false; tw.focus(); } catch (_) {} };
     mk('✕', '', close);
+    const penB = mk('✏️ ペン', 'on', () => setTool(false)), erB = mk('消しゴム', '', () => setTool(true));
+    const setTool = v => { erase = v; penB.classList.toggle('on', !v); erB.classList.toggle('on', v); };
+    mk('↶ 戻す', '', () => { if (cur) return; strokes.pop(); redraw(); });
+    addEventListener('keydown', function k(e) { if (!document.body.contains(ui)) { removeEventListener('keydown', k); return; } if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); strokes.pop(); redraw(); } else if (e.key.toLowerCase() === 'e') setTool(!erase); }); /* PC：Ctrl+Z＝戻す、E＝消しゴム切替 */
     const sendB = mk('準備中…', 'send', async () => { if (!g) return; sendB.disabled = true; sendB.textContent = '送ってる…';
-      const out = await compose(img, cv, strokes.length);
-      const doc = { t: Date.now(), page: g.page, img: out, ink: strokes.length, tags: [...tags], on: g.on, glOk: !!g.glOk, uiOk: !!g.uiOk, state: g.state ? JSON.stringify(g.state).slice(0, 4000) : '', log: JSON.stringify(g.log), scr: { w: g.W, h: g.H, dpr: g.dpr, touch: g.touch }, ua: navigator.userAgent.slice(0, 160) };
+      const inkN = strokes.filter(t => !t.e).length; const out = await compose(img, cv, inkN);
+      const doc = { t: Date.now(), page: g.page, img: out, ink: inkN, tags: [...tags], on: g.on, glOk: !!g.glOk, uiOk: !!g.uiOk, state: g.state ? JSON.stringify(g.state).slice(0, 4000) : '', log: JSON.stringify(g.log), scr: { w: g.W, h: g.H, dpr: g.dpr, touch: g.touch }, ua: navigator.userAgent.slice(0, 160) };
       let ok = false;
       if (db) { try { await db.collection('stress').add(doc); ok = true; } catch (e) { ok = false; } }
       if (ok) { const n = (LS('stress_sent') || 0) + 1; LS('stress_sent', n); close(); toast('💢 くー君に送った（' + n + '件目）'); return; }

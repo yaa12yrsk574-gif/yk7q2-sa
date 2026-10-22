@@ -350,7 +350,6 @@ const rival = (() => { try {
 function stepRival(dt) { if (!rival) return; const r = rival; r.th += r.speed / r.R * dt; const x = r.cx + Math.cos(r.th) * r.R, z = r.cz + Math.sin(r.th) * r.R;
   r.ph = (r.ph + Math.min(r.speed / r.size / 0.56, 3.2) * dt) % 1; bodyFrame(r.body, r.anim, r.ph * r.anim.len);
   r.body.g.position.set(x, 0, z); r.body.g.rotation.y = Math.atan2(-Math.sin(r.th), Math.cos(r.th));
-  if (!r.seen && pl.z < MAP.cliffZ0 - 0.5) { r.seen = true; msg('すげ…同じツノトカゲやのに、なんやあの走り！'); }
   if (!OLD_CAMP.found && Math.hypot(pl.x - OLD_CAMP.x, pl.z - OLD_CAMP.z) < 3) { OLD_CAMP.found = true; msg('前の調査隊の野営地を見つけた'); } }
 // ============ 相棒（乗って動かす） ============
 let mate = null;
@@ -396,7 +395,7 @@ function updBP() { let n = 0; try { n = +localStorage.getItem(BP_KEY) || 0; } ca
 window.__fieldDebug = () => ({ pl, mate, boulder, rival, wilds, setMate, applyMateSize, makeBlueprint, groundAt, setTestSize: v => { testSize = v; applyMateSize(); }, press: () => spaceDown(), release: () => spaceUp() }); /* 検証用 */
 window.__field = { refresh() { if (mate) { const w = loadWorks().find(x => x.id === mate.work.id); if (w) { const keep = { x: mate.x, z: mate.z, y: mate.y, yaw: mate.yaw }; setMate(w); Object.assign(mate, keep); } } updBP(); } };
 // ============ ⚙ 大きさと動きの調整（数値はこの端末に保存） ============
-const TUNE_ROWS = [['camH', 'カメラの高さ', 0.5, 2, 0.05], ['camD', 'カメラの距離', 0.5, 2, 0.05], ['jumpV', 'ジャンプの強さ', 3, 10, 0.1], ['gravity', '重力', 6, 30, 0.5], ['flapV', '羽ばたきの強さ', 1, 10, 0.1], ['glideSink', '滑空で落ちる速さ', 0.2, 4, 0.1], ['glideSpeed', '滑空の速さ', 2, 10, 0.1], ['swimSpeed', '泳ぐ速さ', 0.5, 5, 0.1], ['padStroke', '羽ばたき1回の指の幅', 60, 320, 5], ['airTurn', '空中の旋回', 0.5, 4, 0.1], ['accel', '加速', 2, 20, 0.5], ['turn', '小回り', 2, 15, 0.5], ['agiExp', '大きさで鈍る効き', 0, 1.5, 0.05], ['weightExp', '大きい＝重さの壁', 0, 1.5, 0.05]];
+const TUNE_ROWS = [['camH', 'カメラの高さ', 0.5, 2, 0.05], ['camD', 'カメラの距離', 0.5, 2, 0.05], ['jumpV', 'ジャンプの強さ', 3, 10, 0.1], ['gravity', '重力', 6, 30, 0.5], ['flapV', '羽ばたきの強さ', 1, 10, 0.1], ['glideSink', '滑空で落ちる速さ', 0.2, 4, 0.1], ['glideSpeed', '滑空の速さ', 2, 10, 0.1], ['swimSpeed', '泳ぐ速さ', 0.5, 5, 0.1], ['padStroke', '羽ばたき1回の指の幅', 60, 320, 5], ['airTurn', '空中の旋回', 0.5, 4, 0.1], ['airMax', '飛行の最高速', 3, 25, 0.5], ['airAccel', '飛行の直線加速', 0.5, 8, 0.1], ['airCam', '飛行カメラの追いつき', 0.3, 4, 0.1], ['accel', '加速', 2, 20, 0.5], ['turn', '小回り', 2, 15, 0.5], ['agiExp', '大きさで鈍る効き', 0, 1.5, 0.05], ['weightExp', '大きい＝重さの壁', 0, 1.5, 0.05]];
 function buildTune() { const box = document.getElementById('tuneRows'), T = window.BodyMotion.load(); box.innerHTML = '';
   for (const [k, lb, mn, mx, st] of TUNE_ROWS) { const row = document.createElement('label'); row.innerHTML = '<span></span><input type="range"><b></b>'; row.firstChild.textContent = lb; const inp = row.querySelector('input'), out = row.querySelector('b');
     Object.assign(inp, { min: mn, max: mx, step: st, value: T[k] }); out.textContent = (+T[k]).toFixed(2); inp.oninput = () => { window.BodyMotion.set(k, +inp.value); out.textContent = (+inp.value).toFixed(2); applyMateSize(); }; box.appendChild(row); }
@@ -504,13 +503,17 @@ function stepMate(dt, mx, mz, ml, moving, walking, rx, rz) { const m = mate, T =
   let target = 0;
   const flying = m.canFly && inAir;
   if (flying) { const fwd = -(rz || 0), turnR = T.airTurn * Math.pow(m.size, -0.3); m.yaw -= (rx || 0) * turnR * dt; m.bank += (-(rx || 0) * 0.45 - m.bank) * Math.min(1, dt * 5);
-    target = fwd > 0.15 ? top * Math.min(1, fwd) : fwd < -0.15 ? 0 : m.v; } /* 前に倒す＝加速、後ろ＝ブレーキ、離す＝そのまま */
+    target = fwd < -0.15 ? 0 : m.v; } /* 後ろ＝ブレーキ。前・直線の加速は下でやる */
   else { m.bank += (0 - m.bank) * Math.min(1, dt * 6);
     if (moving) { const want = Math.atan2(mx, mz), diff = Math.atan2(Math.sin(want - m.yaw), Math.cos(want - m.yaw)), rate = P.turn * ctl * (1 - 0.5 * Math.min(1, m.v / Math.max(0.1, top)));
       m.yaw += Math.max(-rate * dt, Math.min(rate * dt, diff)); target = top * Math.min(1, ml) * Math.max(0, Math.cos(diff)); } }
   if (m.st === 'glide') target = Math.max(target, top * 0.8); /* 滑空中は止まれへん */
   if (m.gl) target = Math.max(target, top * 0.8 * (0.4 + 0.6 * wingOpen));
   const dv = target - m.v, acc = (dv > 0 ? P.accel : P.brake) * (inAir ? (gliding ? 0.5 : 0.25) : 1); m.v += Math.sign(dv) * Math.min(Math.abs(dv), acc * dt);
+  // ---- 飛行：左右を入れてない間はだんだん加速し続ける（龍と同じ）。前に倒すともっと速く、曲げると減速。上限は⚙「飛行の最高速」 ----
+  if (flying && m.y > groundAt(m.x, m.z, m.y) + 0.3 && -(rz || 0) >= -0.15) { const turnAmt = Math.min(1, Math.abs(rx || 0) / 0.6), straight = 1 - turnAmt, airTop = T.airMax * Math.pow(m.size, 0.3);
+    if (m.v < airTop) m.v = Math.min(airTop, m.v + T.airAccel * straight * (1 + 0.8 * Math.max(0, -(rz || 0))) * dt);
+    m.v = Math.max(Math.min(m.v, top), m.v - T.airAccel * 1.2 * turnAmt * dt); /* 曲げると直線で稼いだ分だけ減る（ふだんの速さより下には落とさん） */ if (m.v > airTop) m.v += (airTop - m.v) * Math.min(1, dt * 1.5); }
   m.x += Math.sin(m.yaw) * m.v * dt; m.z += Math.cos(m.yaw) * m.v * dt;
   const bump = (nx, nz) => { const into = -(Math.sin(m.yaw) * nx + Math.cos(m.yaw) * nz); if (into <= 0.05) return; if (m.v > 2.6 && into > 0.55) pop(new THREE.Vector3(m.x, m.y + m.info.h + 0.3, m.z), 'ゴン！', '#fff', 16 + m.size * 6); m.v *= 1 - into * 0.85; };
   if (touchBoulder(m, m.info.r, m.info, bump)) m.v = Math.min(m.v, 1.4);
@@ -578,12 +581,13 @@ function step(now) {
   { const T = window.BodyMotion.load(), k = Math.max(1, 1.25 / Math.max(0.45, W / H)), want = mate ? Math.pow(mate.size, 0.75) : 0.85;
     camS = camS == null ? want : camS + (want - camS) * (1 - Math.exp(-dt * 3)); const c = camS, a = 1 - Math.exp(-dt * 7), yy = pl.y;
     if (camHold > 0) camHold -= dt;
-    if (mate && mate.canFly && isAirSt(mate)) camYawT = turnTo(camYawT, mate.yaw, dt * 4); /* 飛んでる間は背中固定 */
+    const flyCam = !!(mate && mate.canFly && isAirSt(mate) && mate.y > groundAt(mate.x, mate.z, mate.y) + 0.3);
+    if (flyCam) { if (camHold <= 0) camYawT = turnTo(camYawT, mate.yaw, dt * T.airCam); } /* 飛んでる間は背中へ、遅れてヌルっと追いつく（ベタ付けやと旋回で酔う）。手で回したらしばらくそっち */
     else if (camHold <= 0 && stickFwd) { const yw = mate ? mate.yaw : pl.yaw, spd = mate ? Math.min(1, mate.v / Math.max(0.5, mate.perfR.top)) : (moving ? 1 : 0), dd = Math.atan2(Math.sin(yw - camYawT), Math.cos(yw - camYawT)), w = Math.max(0, (Math.cos(dd) + 0.3) / 1.3); camYawT = turnTo(camYawT, yw, dt * 1.4 * w * spd); } /* 前に走ってる時だけ、ゆっくり背中側へ */
-    camYaw = turnTo(camYaw, camYawT, 1 - Math.exp(-dt * 10)); /* 手で回してもヌルっと */
+    camYaw = turnTo(camYaw, camYawT, 1 - Math.exp(-dt * (flyCam ? 4 : 10))); /* 手で回してもヌルっと。飛行中はさらにゆっくり */
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw), D = 5.6 * c * T.camD * k;
     // 回る中心は乗り手。追いかけるのは中心だけで、向きは camYaw の円の上をそのまま回る（弦を切ってフラつかない）
-    const tgt = new THREE.Vector3(pl.x, yy, pl.z); if (!camPos) camPos = tgt.clone(); else camPos.lerp(tgt, 1 - Math.exp(-dt * 10));
+    const tgt = new THREE.Vector3(pl.x, yy, pl.z); if (!camPos) camPos = tgt.clone(); else { const yPrev = camPos.y; camPos.lerp(tgt, 1 - Math.exp(-dt * 10)); if (flyCam) camPos.y = yPrev + (yy - yPrev) * (1 - Math.exp(-dt * 2.5)); } /* 飛行中は羽ばたきの上下でカメラが揺れんように、高さだけゆっくり追う */
     const run = mate ? Math.min(1, mate.v / Math.max(0.5, mate.perfR.top)) : (moving ? 1 : 0); camAhead += (run * 2.2 * c - camAhead) * (1 - Math.exp(-dt * 3)); /* 走ってる時だけ少し先を見る。止まってたら乗り手を見る */
     const P = new THREE.Vector3(camPos.x - fx * D, camPos.y + 3.0 * c * T.camH, camPos.z - fz * D); camLook = new THREE.Vector3(camPos.x + fx * camAhead, camPos.y + 0.55 * c, camPos.z + fz * camAhead);
     const eye = camClamp(new THREE.Vector3(camPos.x, camPos.y + Math.max(0.5, (mate ? mate.seatY : 1) + 0.3), camPos.z), P.clone());

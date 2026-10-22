@@ -6,13 +6,13 @@
 //  ・押す力：s^2。
 window.BodyMotion = (() => {
   const KEY = 'yuya_body_motion_tune_v1';
-  const DEF = Object.freeze({ strideExp: 0.5, weightExp: 0.7, accel: 9, turn: 7, agiExp: 1.0, camH: 1, camD: 1, jumpV: 6.4, gravity: 16, flapV: 4.6, glideSink: 1.1, glideSpeed: 5, swimSpeed: 2.2, padStroke: 150, airTurn: 1.8 });
+  const DEF = Object.freeze({ strideExp: 0.5, weightExp: 0.7, accel: 9, turn: 7, agiExp: 1.0, camH: 1, camD: 1, jumpV: 6.4, gravity: 16, flapV: 4.6, glideSink: 1.1, glideSpeed: 5, swimSpeed: 2.2, padStroke: 150, airTurn: 1.3, airMax: 11, airAccel: 2.5, airCam: 1.2 }); // air*：飛行中（旋回の速さ・最高速・直線の加速・カメラが背中に追いつく速さ）
   const LIM = Object.freeze({ min: 0.5, max: 2 });
   let tune = null;
   function load() {
     if (tune) return tune;
     tune = Object.assign({}, DEF);
-    try { const t = JSON.parse(localStorage.getItem(KEY) || 'null'); if (t && typeof t === 'object') for (const k in DEF) if (typeof t[k] === 'number' && isFinite(t[k])) tune[k] = t[k]; } catch (_) {}
+    try { const t = JSON.parse(localStorage.getItem(KEY) || 'null'); if (t && typeof t === 'object' && t.airTurn === 1.8) delete t.airTurn; /* 旧初期値（速すぎて酔う）は新しい初期値へ */ if (t && typeof t === 'object') for (const k in DEF) if (typeof t[k] === 'number' && isFinite(t[k])) tune[k] = t[k]; } catch (_) {}
     return tune;
   }
   function set(k, v) { load(); if (!(k in DEF) || !isFinite(v)) return; tune[k] = v; try { localStorage.setItem(KEY, JSON.stringify(tune)); } catch (_) {} }
