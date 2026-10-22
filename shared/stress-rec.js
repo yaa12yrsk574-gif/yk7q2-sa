@@ -29,15 +29,20 @@
   // 画面の絵（ボタンやパネルも込み）＋記録＋状態
   window.__stressGrab = async function () {
     const W = innerWidth, H = innerHeight, gl = glShot(), k = Math.min(1, 1400 / W);
-    let img = null;
+    let img = null, ui = null;
     const H2 = await timeout(loadH2C(), 4000);
-    if (H2) { try { const c = await timeout(H2(document.body, { backgroundColor: null, scale: k, logging: false, width: W, height: H, x: 0, y: 0, scrollX: 0, scrollY: 0, windowWidth: W, windowHeight: H,
-        ignoreElements: el => el.id === '__stressBtn' || el.id === '__stressUI',
-        onclone: doc => { if (!gl || !gl.el.id) return; const cv = doc.getElementById(gl.el.id); if (!cv) return; const im = doc.createElement('img'); im.src = gl.url; im.style.cssText = getComputedStyle(gl.el).cssText; im.style.position = 'fixed'; im.style.left = '0'; im.style.top = '0'; im.style.width = '100%'; im.style.height = '100%'; cv.replaceWith(im); } }), 6000);
-      if (c) img = c.toDataURL('image/jpeg', 0.8); } catch (_) { img = null; } }
+    if (H2) { try { ui = await timeout(H2(document.body, { backgroundColor: null, scale: k, logging: false, width: W, height: H, x: 0, y: 0, scrollX: 0, scrollY: 0, windowWidth: W, windowHeight: H,
+        ignoreElements: el => el.id === '__stressBtn' || el.id === '__stressUI' || (gl && el === gl.el),
+        onclone: doc => { doc.documentElement.style.background = 'transparent'; doc.body.style.background = 'transparent'; } }), 6000); } catch (_) { ui = null; } }
+    // 3Dの絵を下に敷いて、ボタンやパネル（html2canvas）を上に重ねる
+    const out = document.createElement('canvas'); out.width = Math.round(W * k); out.height = Math.round(H * k); const ox = out.getContext('2d');
+    ox.fillStyle = getComputedStyle(document.body).backgroundColor || '#ddd'; ox.fillRect(0, 0, out.width, out.height);
+    if (gl) { const im = await new Promise(r => { const m = new Image(); m.onload = () => r(m); m.onerror = () => r(null); m.src = gl.url; }); if (im) { const R = gl.el.getBoundingClientRect(); ox.drawImage(im, R.left * k, R.top * k, R.width * k, R.height * k); } }
+    if (ui) ox.drawImage(ui, 0, 0, out.width, out.height);
+    img = out.toDataURL('image/jpeg', 0.8);
     if (!img && gl) img = gl.url; // 絵が取れへん時は3D画面だけでも
     const on = [...document.querySelectorAll('button.on,.btn.on,[aria-pressed="true"]')].map(label).filter(Boolean).slice(0, 24);
     let st = null; try { st = window.__stressState ? window.__stressState() : null; } catch (e) { st = { err: String(e) }; }
-    return { img, log: LOG.slice(), on, state: st, page: location.pathname.split('/').pop() || 'index', W, H, dpr: devicePixelRatio || 1, touch: navigator.maxTouchPoints || 0 };
+    return { img, glOk: !!(gl && gl.url && gl.url.length > 8000), uiOk: !!ui, log: LOG.slice(), on, state: st, page: location.pathname.split('/').pop() || 'index', W, H, dpr: devicePixelRatio || 1, touch: navigator.maxTouchPoints || 0 };
   };
 })();

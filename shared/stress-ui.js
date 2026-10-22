@@ -50,11 +50,12 @@
     ui.innerHTML = '<img alt=""><canvas></canvas><div class="hint">💢 気になる所に赤ペンで印（描かんでもOK）</div><div class="bar"></div>';
     document.body.appendChild(ui); const img = ui.querySelector('img'), cv = ui.querySelector('canvas'), bar = ui.querySelector('.bar');
     if (g.img) img.src = g.img;
-    const dpr = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); const x = cv.getContext('2d'); x.scale(dpr, dpr); x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#ff2a1a';
+    const dpr = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); const x = cv.getContext('2d', { desynchronized: true }); x.scale(dpr, dpr); x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#ff2a1a';
     const strokes = []; let cur = null;
     const redraw = () => { x.clearRect(0, 0, innerWidth, innerHeight); for (const s of strokes) { for (let i = 1; i < s.length; i++) { x.lineWidth = 3 + 5 * s[i][2]; x.beginPath(); x.moveTo(s[i - 1][0], s[i - 1][1]); x.lineTo(s[i][0], s[i][1]); x.stroke(); } } };
     cv.addEventListener('pointerdown', e => { e.preventDefault(); cur = [[e.clientX, e.clientY, e.pressure || 0.5]]; strokes.push(cur); try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
-    cv.addEventListener('pointermove', e => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) cur.push([ev.clientX, ev.clientY, ev.pressure || 0.5]); redraw(); });
+    const seg = (a, b) => { x.lineWidth = 3 + 5 * b[2]; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); }; /* 足した所だけ描く */
+    cv.addEventListener('pointermove', e => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) { const q = [ev.clientX, ev.clientY, ev.pressure || 0.5]; seg(cur[cur.length - 1], q); cur.push(q); } });
     const end = () => { cur = null; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     const tags = new Set();
     for (const t of TAGS) { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { tags.has(t) ? tags.delete(t) : tags.add(t); b.classList.toggle('on', tags.has(t)); }; bar.appendChild(b); }
@@ -65,7 +66,7 @@
     mk('やめる', '', close);
     const sendB = mk('送る', 'send', async () => { sendB.disabled = true; sendB.textContent = '送ってる…';
       const out = await compose(img, cv, strokes.length);
-      const doc = { t: Date.now(), page: g.page, img: out, ink: strokes.length, tags: [...tags], on: g.on, state: g.state ? JSON.stringify(g.state).slice(0, 4000) : '', log: JSON.stringify(g.log), scr: { w: g.W, h: g.H, dpr: g.dpr, touch: g.touch }, ua: navigator.userAgent.slice(0, 160) };
+      const doc = { t: Date.now(), page: g.page, img: out, ink: strokes.length, tags: [...tags], on: g.on, glOk: !!g.glOk, uiOk: !!g.uiOk, state: g.state ? JSON.stringify(g.state).slice(0, 4000) : '', log: JSON.stringify(g.log), scr: { w: g.W, h: g.H, dpr: g.dpr, touch: g.touch }, ua: navigator.userAgent.slice(0, 160) };
       let ok = false;
       if (db) { try { await db.collection('stress').add(doc); ok = true; } catch (e) { ok = false; } }
       if (ok) { const n = (LS('stress_sent') || 0) + 1; LS('stress_sent', n); close(); toast('💢 くー君に送った（' + n + '件目）'); return; }
