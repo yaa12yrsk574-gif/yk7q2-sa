@@ -1216,6 +1216,7 @@ const stamp = () => { const d = new Date(), z = n => String(n).padStart(2, '0');
 document.getElementById('fSave').onclick = async () => { const L = loadWorks(); if (!L.length) { toast('まだ作品がない'); return; } const txt = JSON.stringify({ type: 'yuya_bone_works', v: 1, works: L }); const dl = await capUse('downloads');
   const fb = () => { document.getElementById('xOut').click(); toast('ここではファイル保存できへんから、文字で出した'); };
   if (!dl) { fb(); return; } try { await dl.save({ filename: `工房の作品_${stamp()}.json`, data: txt }); toast(L.length + '作品をファイルに保存した'); } catch (e) { const c = e && e.code; if (c === 'declined') return; if (c === 'rate_limited') { toast('ちょっと待ってからもう一回'); return; } fb(); } };
+window.__stressState = () => ({ mode, sel: sel == null ? null : String(sel && sel.id != null ? sel.id : sel), selJ: selJ == null ? null : String(selJ), bones: S && S.bones ? S.bones.length : 0, anim: S && S.anim ? { len: S.anim.len, keys: (S.anim.keys || []).length } : null, smooth }); /* 💢用 */
 window.__workshopDebug = () => ({ S, ANIM, proj, V3, gotoFrame, mode, st, jointGraph }); /* 検証用 */
 })();
 

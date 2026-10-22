@@ -736,6 +736,7 @@ const GLOW = (() => {
     geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; }
   return { tick, burst, get live() { return live; } };
 })();
+window.__stressState = () => ({ mate: mate ? { name: mate.work.name, st: mate.st, size: +mate.size.toFixed(2), canFly: mate.canFly, v: +mate.v.toFixed(2) } : null, bird: BIRD.st, stam: Math.round(BIRD.stam), pad: rpad.mode, camYaw: +camYaw.toFixed(2), pos: [pl.x, pl.y, pl.z].map(v => +v.toFixed(1)), time: +SKY.p.toFixed(2) }); /* 💢用 */
 window.__sky = SKY; window.__glow = GLOW; window.__pad = () => ({ rpad, camYaw, scrubWing, wAt }); window.__scene = scene; window.__mate = () => mate; /* 検証用 */
 addEventListener('error', e => { const el = document.getElementById('dbg'); el.textContent = 'エラー：' + (e.message || ''); el.style.display = 'block'; });
 // はじめて来た時：ツノトカゲの設計図を渡して乗せる。前に乗ってた子がいれば、いちばん新しい作品に乗る
