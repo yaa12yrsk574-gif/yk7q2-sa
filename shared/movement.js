@@ -6,7 +6,7 @@
 //  ・押す力：s^2。
 window.BodyMotion = (() => {
   const KEY = 'yuya_body_motion_tune_v1';
-  const DEF = Object.freeze({ strideExp: 0.5, weightExp: 0.7, accel: 9, turn: 7, agiExp: 1.0, camH: 1, camD: 1, jumpV: 6.4, gravity: 16, flapV: 4.6, glideSink: 1.1, glideSpeed: 5, swimSpeed: 2.2, padStroke: 150, airTurn: 1.3, airMax: 11, airAccel: 2.5, airCam: 1.2 }); // air*：飛行中（旋回の速さ・最高速・直線の加速・カメラが背中に追いつく速さ）
+  const DEF = Object.freeze({ strideExp: 0.5, weightExp: 0.7, accel: 9.5, turn: 7, agiExp: 1.0, camH: 1, camD: 1, jumpV: 6.4, gravity: 16, flapV: 4.6, glideSink: 1.1, glideSpeed: 6, swimSpeed: 2.2, padStroke: 150, airTurn: 1.3, airMax: 13, airAccel: 5.6, airCam: 1.2 }); // air*：飛行中（旋回の速さ・最高速・直線の加速・カメラが背中に追いつく速さ）
   const LIM = Object.freeze({ min: 0.5, max: 2 });
   let tune = null;
   function load() {
