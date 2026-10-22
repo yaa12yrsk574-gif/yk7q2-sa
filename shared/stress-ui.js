@@ -37,26 +37,28 @@
     if (busy || document.getElementById('__stressUI')) return; busy = true; const tw = target();
     if (!tw) { busy = false; toast('この画面は記録できへん'); return; }
     try { tw.__paused = true; tw.__clearMovementInput && tw.__clearMovementInput(); } catch (_) {}
-    btn.style.visibility = 'hidden'; let grab = null;
-    try { grab = await tw.__stressGrab(); } catch (e) { grab = null; }
-    btn.style.visibility = ''; busy = false;
-    if (!grab) { try { tw.__paused = false; } catch (_) {} toast('画面が取れへんかった'); return; }
-    sheet(grab, tw);
+    let quick = null; try { quick = tw.__stressQuick ? tw.__stressQuick() : null; } catch (_) {}
+    const full = new Promise(r => setTimeout(r, 60)).then(async () => { btn.style.visibility = 'hidden'; try { return await tw.__stressGrab(); } catch (_) { return null; } finally { btn.style.visibility = ''; } }); /* 先に赤ペン画面を出してから、裏で全体の絵を取る */
+    busy = false; sheet(quick, full, tw); /* 赤ペンはすぐ描ける。ボタン類込みの絵は後から差し替え */
   }
   window.__stressOpen = open;
   // ---- 止めた画面＋赤ペン ----
-  function sheet(g, tw) {
+  function sheet(quick, fullP, tw) { let g = null;
     const ui = document.createElement('div'); ui.id = '__stressUI';
     ui.innerHTML = '<img alt=""><canvas></canvas><div class="hint">💢 気になる所に赤ペンで印（描かんでもOK）</div><div class="bar"></div>';
     document.body.appendChild(ui); const img = ui.querySelector('img'), cv = ui.querySelector('canvas'), bar = ui.querySelector('.bar');
-    if (g.img) img.src = g.img;
+    if (quick) img.src = quick;
+    ui.addEventListener('touchstart', e => { if (e.target === cv) e.preventDefault(); }, { passive: false }); ui.addEventListener('touchmove', e => { if (e.target === cv) e.preventDefault(); }, { passive: false }); /* iPadの手書き認識などで待たされんように */
     const dpr = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); const x = cv.getContext('2d', { desynchronized: true }); x.scale(dpr, dpr); x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#ff2a1a';
     const strokes = []; let cur = null;
-    const redraw = () => { x.clearRect(0, 0, innerWidth, innerHeight); for (const s of strokes) { for (let i = 1; i < s.length; i++) { x.lineWidth = 3 + 5 * s[i][2]; x.beginPath(); x.moveTo(s[i - 1][0], s[i - 1][1]); x.lineTo(s[i][0], s[i][1]); x.stroke(); } } };
+    const redraw = () => { x.clearRect(0, 0, innerWidth, innerHeight); for (const s of strokes) { for (let n = 2; n <= s.length; n++) seg(s.slice(0, n)); } };
     cv.addEventListener('pointerdown', e => { e.preventDefault(); cur = [[e.clientX, e.clientY, e.pressure || 0.5]]; strokes.push(cur); try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
-    const seg = (a, b) => { x.lineWidth = 3 + 5 * b[2]; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); }; /* 足した所だけ描く */
-    cv.addEventListener('pointermove', e => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) { const q = [ev.clientX, ev.clientY, ev.pressure || 0.5]; seg(cur[cur.length - 1], q); cur.push(q); } });
-    const end = () => { cur = null; }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    const lv = document.createElement('canvas'); lv.width = cv.width; lv.height = cv.height; lv.style.pointerEvents = 'none'; ui.insertBefore(lv, cv.nextSibling); const lx = lv.getContext('2d'); lx.scale(dpr, dpr); lx.lineCap = 'round'; lx.strokeStyle = 'rgba(255,42,26,.55)';
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const seg = s => { const n = s.length; if (n < 2) return; const a = s[n - 2], b = s[n - 1], p0 = n > 2 ? mid(s[n - 3], a) : a, p1 = mid(a, b); x.lineWidth = 3 + 5 * b[2]; x.beginPath(); x.moveTo(p0[0], p0[1]); x.quadraticCurveTo(a[0], a[1], p1[0], p1[1]); x.stroke(); }; /* 足した所だけ、なめらかに */
+    cv.addEventListener('pointermove', e => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) { cur.push([ev.clientX, ev.clientY, ev.pressure || 0.5]); seg(cur); }
+      lx.clearRect(0, 0, innerWidth, innerHeight); const pr = e.getPredictedEvents ? e.getPredictedEvents() : []; if (pr.length) { const l = cur[cur.length - 1]; lx.lineWidth = 3 + 5 * l[2]; lx.beginPath(); lx.moveTo(l[0], l[1]); for (const q of pr) lx.lineTo(q.clientX, q.clientY); lx.stroke(); } }); /* 先読み分を薄く出して遅れを感じさせない */
+    const end = () => { if (cur && cur.length > 1) { const l = cur[cur.length - 1], m = mid(cur[cur.length - 2], l); x.lineWidth = 3 + 5 * l[2]; x.beginPath(); x.moveTo(m[0], m[1]); x.lineTo(l[0], l[1]); x.stroke(); } cur = null; lx.clearRect(0, 0, innerWidth, innerHeight); }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     const tags = new Set();
     for (const t of TAGS) { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { tags.has(t) ? tags.delete(t) : tags.add(t); b.classList.toggle('on', tags.has(t)); }; bar.appendChild(b); }
     const sep = document.createElement('div'); sep.className = 'sep'; bar.appendChild(sep);
@@ -64,7 +66,7 @@
     mk('↶ 戻す', '', () => { strokes.pop(); redraw(); });
     const close = () => { ui.remove(); try { tw.__paused = false; tw.focus(); } catch (_) {} };
     mk('やめる', '', close);
-    const sendB = mk('送る', 'send', async () => { sendB.disabled = true; sendB.textContent = '送ってる…';
+    const sendB = mk('準備中…', 'send', async () => { if (!g) return; sendB.disabled = true; sendB.textContent = '送ってる…';
       const out = await compose(img, cv, strokes.length);
       const doc = { t: Date.now(), page: g.page, img: out, ink: strokes.length, tags: [...tags], on: g.on, glOk: !!g.glOk, uiOk: !!g.uiOk, state: g.state ? JSON.stringify(g.state).slice(0, 4000) : '', log: JSON.stringify(g.log), scr: { w: g.W, h: g.H, dpr: g.dpr, touch: g.touch }, ua: navigator.userAgent.slice(0, 160) };
       let ok = false;
@@ -72,6 +74,7 @@
       if (ok) { const n = (LS('stress_sent') || 0) + 1; LS('stress_sent', n); close(); toast('💢 くー君に送った（' + n + '件目）'); return; }
       const q = LS('stress_local') || []; q.push(Object.assign({}, doc, { img: '' })); LS('stress_local', q.slice(-30)); close();
       toast(db ? '送れへんかった。この端末には残したで' : 'この画面からはくー君に届かへん。claude.aiのリンクで開いてな'); });
+    sendB.disabled = true; fullP.then(r => { if (!document.body.contains(ui)) return; g = r || { img: quick, log: [], on: [], state: null, page: '?', W: innerWidth, H: innerHeight, dpr: devicePixelRatio || 1, touch: navigator.maxTouchPoints || 0 }; if (r && r.img) img.src = r.img; sendB.disabled = false; sendB.textContent = '送る'; });
   }
   // 止めた画面と赤ペンを1枚の絵に（大きすぎたら小さく）
   async function compose(img, ink, n) {

@@ -26,6 +26,7 @@
   let h2c = null;
   const loadH2C = () => h2c || (h2c = new Promise(res => { if (window.html2canvas) return res(window.html2canvas); const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; s.onload = () => res(window.html2canvas || null); s.onerror = () => res(null); document.head.appendChild(s); }));
   const timeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
+  window.__stressQuick = () => { const g = glShot(); return g ? g.url : null; }; /* すぐ出す用：3Dの絵だけ */
   // 画面の絵（ボタンやパネルも込み）＋記録＋状態
   window.__stressGrab = async function () {
     const W = innerWidth, H = innerHeight, gl = glShot(), k = Math.min(1, 1400 / W);

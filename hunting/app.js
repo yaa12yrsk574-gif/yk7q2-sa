@@ -414,9 +414,10 @@ function turnTo(a, b, k) { let d = b - a; d = Math.atan2(Math.sin(d), Math.cos(d
 function spaceDown() { if (spaceHeld) return; spaceHeld = true; spaceEdge++; }
 function spaceUp() { if (!spaceHeld) return; spaceHeld = false; spaceUpEdge++; }
 // 別ウィンドウへ移動した時にkeyup/pointerupを受け取れず歩き続けるのを防止
+function clearKeys() { keys.clear(); spaceUp(); } /* キーだけ。指の操作は指を離した時に終わる */
 function clearMovementInput() { keys.clear(); joy = null; spaceUp(); padUp(); orbit = null; const pad = document.getElementById('pad'); if (pad) { pad.style.display = 'none'; pad.firstChild.style.transform = ''; } }
-window.__clearMovementInput = clearMovementInput;
-addEventListener('blur', clearMovementInput);
+window.__clearMovementInput = clearKeys; window.__clearAllInput = clearMovementInput;
+addEventListener('blur', clearKeys);
 addEventListener('pagehide', clearMovementInput);
 document.addEventListener('visibilitychange', () => { if (document.hidden) clearMovementInput(); });
 addEventListener('keydown', e => { if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; const k = e.key.toLowerCase(); keys.add(k); if (!document.body.classList.contains('pc')) document.body.classList.add('pc');
@@ -493,7 +494,7 @@ function stepMate(dt, mx, mz, ml, moving, walking, rx, rz) { const m = mate, T =
     for (const seg of rpad.pend) { const r = scrubWing(m, seg.d, T.padStroke), sf = Math.max(0.35, Math.min(1.7, seg.fs / ref)); L += r.lift; Lw += r.lift * sf; Dg += r.drag * sf; } /* 指の速さ（お手本アニメの振りの速さが基準）で強さが変わる */
     rpad.pend = [];
     const stam = L > 0 ? BIRD.spend(L) : 1; if (m.y <= groundAt(m.x, m.z, m.y) + 0.05) Lw *= 1.5; /* 地面すれすれは地面効果で浮きやすい（その場から飛び立てるように） */
-    if (L > 0) { m.vy *= m.vy < 0 ? 1 - Math.min(1, L * 1.2) : 1 - Math.min(0.9, L * 0.65); m.vy += up * Lw * stam; m.v += Lw * stam * 1.6; m.lift = Lw * stam / Math.max(dt, 1e-3); }
+    if (L > 0) { m.vy *= m.vy < 0 ? 1 - Math.min(1, L * 1.2) : 1 - Math.min(0.9, L * 0.65); m.vy += up * Lw * stam; m.lift = Lw * stam / Math.max(dt, 1e-3); }
     if (Dg > 0) m.vy -= up * Dg * 0.15;
     m.vy = Math.min(m.vy, up * 2.2);
     wingOpen = wAt(m.wp, m.wp.span, m.wf); if (rpad.still > 0.15) m.gl = true; }
@@ -539,14 +540,15 @@ function stepMate(dt, mx, mz, ml, moving, walking, rx, rz) { const m = mate, T =
 // 影（空中で高さが分かるように）
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })); shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
 // ============ ループ ============
-let last = performance.now(), camS = null, camPos = null, camLook = null, camEye = null;
+let last = performance.now(), camS = null, camPos = null, camLook = null, camEye = null, camAhead = 0;
 let loopErr = ''; function loop(now) { requestAnimationFrame(loop); try { step(now); } catch (e) { const m = String(e && e.message || e); if (m !== loopErr) { loopErr = m; const el = document.getElementById('dbg'); el.textContent = '止まった理由：' + m; el.style.display = 'block'; } } }
 function step(now) {
-  const away = window.__paused || document.hidden || !document.hasFocus() && !(window.parent !== window && window.parent.document.hasFocus() && window.parent.__gameOn);
+  const pcFocusLost = document.body.classList.contains('pc') && keys.size === 0 && !joy && !rpad.active && !document.hasFocus() && !(window.parent !== window && window.parent.document.hasFocus() && window.parent.__gameOn);
+  const away = window.__paused || document.hidden || pcFocusLost; /* iPadはiframeにフォーカスが来ないので、フォーカスで止めない */
   document.getElementById('pauseV').style.display = away && !window.__paused ? 'flex' : 'none';
   if (away) { clearMovementInput(); last = now; return; }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (!document.hasFocus() || (window.parent !== window && !window.parent.document.hasFocus())) clearMovementInput();
+  if (keys.size && (!document.hasFocus() || (window.parent !== window && !window.parent.document.hasFocus()))) clearKeys();
   let mx = 0, mz = 0;
   if (keys.has('w') || keys.has('arrowup')) mz -= 1;
   if (keys.has('s') || keys.has('arrowdown')) mz += 1;
@@ -580,10 +582,12 @@ function step(now) {
     else if (camHold <= 0 && stickFwd) { const yw = mate ? mate.yaw : pl.yaw, spd = mate ? Math.min(1, mate.v / Math.max(0.5, mate.perfR.top)) : (moving ? 1 : 0), dd = Math.atan2(Math.sin(yw - camYawT), Math.cos(yw - camYawT)), w = Math.max(0, (Math.cos(dd) + 0.3) / 1.3); camYawT = turnTo(camYawT, yw, dt * 1.4 * w * spd); } /* 前に走ってる時だけ、ゆっくり背中側へ */
     camYaw = turnTo(camYaw, camYawT, 1 - Math.exp(-dt * 10)); /* 手で回してもヌルっと */
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw), D = 5.6 * c * T.camD * k;
-    const P = new THREE.Vector3(pl.x - fx * D, yy + 3.0 * c * T.camH, pl.z - fz * D), L = new THREE.Vector3(pl.x + fx * 2.2 * c, yy + 0.55 * c, pl.z + fz * 2.2 * c);
-    if (!camPos) { camPos = P.clone(); camLook = L.clone(); } else { camPos.lerp(P, a); camLook.lerp(L, a); }
-    const eye = camClamp(new THREE.Vector3(pl.x, yy + Math.max(0.5, (mate ? mate.seatY : 1) + 0.3), pl.z), camPos.clone());
-    if (!camEye) camEye = eye.clone(); else camEye.lerp(eye, 1 - Math.exp(-dt * 5));
+    // 回る中心は乗り手。追いかけるのは中心だけで、向きは camYaw の円の上をそのまま回る（弦を切ってフラつかない）
+    const tgt = new THREE.Vector3(pl.x, yy, pl.z); if (!camPos) camPos = tgt.clone(); else camPos.lerp(tgt, 1 - Math.exp(-dt * 10));
+    const run = mate ? Math.min(1, mate.v / Math.max(0.5, mate.perfR.top)) : (moving ? 1 : 0); camAhead += (run * 2.2 * c - camAhead) * (1 - Math.exp(-dt * 3)); /* 走ってる時だけ少し先を見る。止まってたら乗り手を見る */
+    const P = new THREE.Vector3(camPos.x - fx * D, camPos.y + 3.0 * c * T.camH, camPos.z - fz * D); camLook = new THREE.Vector3(camPos.x + fx * camAhead, camPos.y + 0.55 * c, camPos.z + fz * camAhead);
+    const eye = camClamp(new THREE.Vector3(camPos.x, camPos.y + Math.max(0.5, (mate ? mate.seatY : 1) + 0.3), camPos.z), P.clone());
+    if (!camEye) camEye = eye.clone(); else camEye.lerp(eye, 1 - Math.exp(-dt * 14));
     cam.position.copy(camEye); cam.lookAt(camLook); updateCrowns(camEye.x, camEye.z, pl.x, pl.z, pl.y); }
   renderer.render(scene, cam); }
 // ============ 鳥人間：桟橋の先から海へ。羽ばたき＝スタミナ、気流と滑空はタダ、輪っかで回復 ============
