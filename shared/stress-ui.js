@@ -45,7 +45,7 @@
   // ---- 止めた画面＋赤ペン ----
   function sheet(quick, fullP, tw) { let g = null;
     const ui = document.createElement('div'); ui.id = '__stressUI';
-    ui.innerHTML = '<img alt=""><canvas></canvas><div class="hint">💢 気になる所に赤ペンで印（描かんでもOK）</div><div class="bar"></div>';
+    ui.innerHTML = '<img alt=""><canvas></canvas><div class="bar"></div>';
     document.body.appendChild(ui); const img = ui.querySelector('img'), cv = ui.querySelector('canvas'), bar = ui.querySelector('.bar');
     if (quick) img.src = quick;
     ui.addEventListener('touchstart', e => { if (e.target === cv) e.preventDefault(); }, { passive: false }); ui.addEventListener('touchmove', e => { if (e.target === cv) e.preventDefault(); }, { passive: false }); /* iPadの手書き認識などで待たされんように */
@@ -60,12 +60,9 @@
       lx.clearRect(0, 0, innerWidth, innerHeight); const pr = e.getPredictedEvents ? e.getPredictedEvents() : []; if (pr.length) { const l = cur[cur.length - 1]; lx.lineWidth = 3 + 5 * l[2]; lx.beginPath(); lx.moveTo(l[0], l[1]); for (const q of pr) lx.lineTo(q.clientX, q.clientY); lx.stroke(); } }); /* 先読み分を薄く出して遅れを感じさせない */
     const end = () => { if (cur && cur.length > 1) { const l = cur[cur.length - 1], m = mid(cur[cur.length - 2], l); x.lineWidth = 3 + 5 * l[2]; x.beginPath(); x.moveTo(m[0], m[1]); x.lineTo(l[0], l[1]); x.stroke(); } cur = null; lx.clearRect(0, 0, innerWidth, innerHeight); }; cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     const tags = new Set();
-    for (const t of TAGS) { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { tags.has(t) ? tags.delete(t) : tags.add(t); b.classList.toggle('on', tags.has(t)); }; bar.appendChild(b); }
-    const sep = document.createElement('div'); sep.className = 'sep'; bar.appendChild(sep);
     const mk = (t, cls, fn) => { const b = document.createElement('button'); b.textContent = t; if (cls) b.className = cls; b.onclick = fn; bar.appendChild(b); return b; };
-    mk('↶ 戻す', '', () => { strokes.pop(); redraw(); });
     const close = () => { ui.remove(); try { tw.__paused = false; tw.focus(); } catch (_) {} };
-    mk('やめる', '', close);
+    mk('✕', '', close);
     const sendB = mk('準備中…', 'send', async () => { if (!g) return; sendB.disabled = true; sendB.textContent = '送ってる…';
       const out = await compose(img, cv, strokes.length);
       const doc = { t: Date.now(), page: g.page, img: out, ink: strokes.length, tags: [...tags], on: g.on, glOk: !!g.glOk, uiOk: !!g.uiOk, state: g.state ? JSON.stringify(g.state).slice(0, 4000) : '', log: JSON.stringify(g.log), scr: { w: g.W, h: g.H, dpr: g.dpr, touch: g.touch }, ua: navigator.userAgent.slice(0, 160) };
