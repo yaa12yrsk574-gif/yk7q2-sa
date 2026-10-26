@@ -1,5 +1,6 @@
 // 💢ボタン（いちばん外のページで動く）。押すと画面が止まって赤ペンが出る→「送る」で絵・赤ペン・直前15秒の操作をまとめて残す。
-// claude.ai のリンクで開いてる時は db の stress に入る（くー君が読める）。それ以外はこの端末に置いとく。
+// claude.ai のリンクで開いてる時は db の stress に入る（くー君が読める）。それ以外は絵ごとこの端末（IndexedDB）に置いとく。
+// 置いた分は 💢 の横の赤い数字から「コピー」→くー君のチャットに貼れる。claude.ai で開き直したら自動で送る。
 (function () {
   if (window.__stressUI) return; window.__stressUI = true;
   const TAGS = ['遅い・重い', '狙った所に行かん', '見えん・隠れる', '何が起きたか分からん', '手順が多い', '思った動きと違う'];
@@ -15,6 +16,13 @@
 #__stressUI .bar .send{background:#2b2a27;color:#fff;border-color:#2b2a27;padding:8px 18px}
 #__stressUI .bar .sep{width:1px;align-self:stretch;background:#cfc7b8}
 #__stressUI .hint{position:absolute;left:50%;top:calc(12px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:rgba(226,59,46,.95);color:#fff;font-weight:800;font-size:13px;padding:7px 14px;border-radius:99px;white-space:nowrap;pointer-events:none}
+#__stressBadge{position:fixed;z-index:9998;display:none;min-width:22px;height:22px;border-radius:11px;border:2px solid #fff;background:#e23b2e;color:#fff;font:800 12px/18px "Hiragino Sans",sans-serif;padding:0 5px;text-align:center;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+#__stressRescue{position:fixed;z-index:10001;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:rgba(250,247,241,.97);color:#2b2a27;border-radius:16px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.3);font-family:"Hiragino Sans","Zen Kaku Gothic New",sans-serif;font-size:14px;text-align:center;max-width:calc(100vw - 24px);box-sizing:border-box}
+#__stressRescue .sub{font-size:11px;color:#7a7368;margin:3px 0 9px}
+#__stressRescue .row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+#__stressRescue button{font:inherit;font-weight:800;font-size:13px;border:1.5px solid #cfc7b8;background:#fff;color:#2b2a27;border-radius:99px;padding:8px 14px;cursor:pointer}
+#__stressRescue button.main{background:#e23b2e;border-color:#e23b2e;color:#fff}
+#__stressRescue button.del{color:#a33}
 #__stressToast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:10000;background:#2b2a27;color:#fff;font:800 13px "Hiragino Sans",sans-serif;padding:9px 16px;border-radius:99px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   const toastEl = document.createElement('div'); toastEl.id = '__stressToast'; document.body.appendChild(toastEl);
@@ -31,7 +39,51 @@
   addEventListener('keydown', e => { if (e.key === 'F2' || e.key === '\\') { e.preventDefault(); open(); } });
   // ---- どのページの絵を取るか：工房と狩り場が入ってる外枠なら、今見えてる方 ----
   function target() { const fr = [...document.querySelectorAll('iframe')].filter(f => getComputedStyle(f).display !== 'none'); for (const f of fr) { try { if (f.contentWindow.__stressGrab) return f.contentWindow; } catch (_) {} } return window.__stressGrab ? window : null; }
-  let db = null; (async () => { try { const C = window.claude; if (C && C.use) db = await C.use('db'); } catch (_) { db = null; } })();
+  // ---- 届いてへん💢の置き場（IndexedDB。絵と赤ペンごと。古い localStorage の分も引っ越す） ----
+  const Q = (() => {
+    let dbp = null; const open = () => dbp || (dbp = new Promise((res) => { try { const r = indexedDB.open('stress_local_db', 1); r.onupgradeneeded = () => r.result.createObjectStore('q', { keyPath: 'k', autoIncrement: true }); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (_) { res(null); } }));
+    const tx = async (mode, fn) => { const d = await open(); if (!d) return null; return new Promise(res => { try { const t = d.transaction('q', mode), s = t.objectStore('q'); const out = fn(s); t.oncomplete = () => res(out && 'result' in out ? out.result : true); t.onerror = () => res(null); } catch (_) { res(null); } }); };
+    return {
+      add: d => tx('readwrite', s => s.add(Object.assign({}, d))),
+      all: async () => (await tx('readonly', s => s.getAll())) || [],
+      del: k => tx('readwrite', s => s.delete(k)),
+      clear: () => tx('readwrite', s => s.clear()),
+      async migrate() { const old = LS('stress_local'); if (!old || !old.length) return; for (const d of old) await this.add(Object.assign({ old: 1 }, d)); try { localStorage.removeItem('stress_local'); } catch (_) {} }
+    };
+  })();
+  const badge = document.createElement('button'); badge.id = '__stressBadge'; document.body.appendChild(badge);
+  const placeBadge = () => { badge.style.left = (btn.offsetLeft + 30) + 'px'; badge.style.top = (btn.offsetTop - 6) + 'px'; };
+  async function refreshBadge() { const n = (await Q.all()).length; LS('stress_unsent_n', n); badge.textContent = n; badge.style.display = n ? 'block' : 'none'; placeBadge(); return n; }
+  new MutationObserver(placeBadge).observe(btn, { attributes: true, attributeFilter: ['style'] });
+  badge.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); });
+  badge.addEventListener('click', e => { e.stopPropagation(); rescue(); });
+  const ART = 'https://claude.ai/artifact/TgUYw7r6vbmovyCYbEt4cC';
+  // 届いてへん💢を見せる：コピーしてくー君のチャットに貼る／claude.ai版へ／消す
+  async function rescue() {
+    if (document.getElementById('__stressRescue')) return; const list = await Q.all(); if (!list.length) { refreshBadge(); return; }
+    const box = document.createElement('div'); box.id = '__stressRescue';
+    const withImg = list.filter(d => d.img).length;
+    box.innerHTML = `<b>くー君に届いてへん💢 ${list.length}件</b><div class="sub">${withImg < list.length ? `絵つき ${withImg}件・絵なし ${list.length - withImg}件（前の作りの分は絵が残ってへん）` : '絵と赤ペンも残ってる'}</div><div class="row"></div>`;
+    const row = box.querySelector('.row'); const b = (t, cls, fn) => { const x = document.createElement('button'); x.textContent = t; if (cls) x.className = cls; x.onclick = fn; row.appendChild(x); return x; };
+    b('コピー', 'main', async () => {
+      const txt = '💢未送信 ' + list.length + '件（くー君へ）\n' + JSON.stringify(list.map(d => { const c = Object.assign({}, d); delete c.k; return c; }));
+      let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch (_) { try { const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (_) {} }
+      toast(ok ? 'コピーした！くー君のチャットに貼ってな' : 'コピーできへんかった…');
+      if (ok) { cpd = true; delB.textContent = '貼れたから消す'; }
+    });
+    let cpd = false;
+    if (!db) b('claude.ai版で開く', '', () => { location.href = ART; });
+    const delB = b('消す', 'del', async () => { if (!cpd && !confirm('コピーしてへんけど消してええ？')) return; await Q.clear(); box.remove(); refreshBadge(); toast('消した'); });
+    b('閉じる', '', () => box.remove());
+    document.body.appendChild(box);
+  }
+  let db = null; (async () => { try { const C = window.claude; if (C && C.use) db = await C.use('db'); } catch (_) { db = null; }
+    await Q.migrate(); let n = await refreshBadge();
+    if (db && n) { /* claude.ai で開いた時：端末に残ってた分を自動でくー君に送る */
+      let sent = 0; for (const d of await Q.all()) { const c = Object.assign({}, d); delete c.k; try { await db.collection('stress').add(c); await Q.del(d.k); sent++; } catch (_) { break; } }
+      n = await refreshBadge(); if (sent) toast('端末に残ってた💢 ' + sent + '件、くー君に送った');
+    } else if (!db && n && /github\.io$/.test(location.hostname)) rescue(); /* github.io で未送信がある時は先に救出画面 */
+  })();
   let busy = false;
   async function open() {
     if (busy || document.getElementById('__stressUI')) return; busy = true; const tw = target();
@@ -77,8 +129,8 @@
       let ok = false;
       if (db) { try { await db.collection('stress').add(doc); ok = true; } catch (e) { ok = false; } }
       if (ok) { const n = (LS('stress_sent') || 0) + 1; LS('stress_sent', n); close(); toast('💢 くー君に送った（' + n + '件目）'); return; }
-      const q = LS('stress_local') || []; q.push(Object.assign({}, doc, { img: '' })); LS('stress_local', q.slice(-30)); close();
-      toast(db ? '送れへんかった。この端末には残したで' : 'この画面からはくー君に届かへん。claude.aiのリンクで開いてな'); });
+      await Q.add(doc); close(); refreshBadge(); /* 絵と赤ペンごと端末に残す（あとでコピー or 自動で送る） */
+      toast(db ? '送れへんかった。絵ごと端末に残したで' : '端末に残した。右上の数字からくー君に渡せるで'); });
     sendB.disabled = true; fullP.then(r => { if (!document.body.contains(ui)) return; g = r || { img: quick, log: [], on: [], state: null, page: '?', W: innerWidth, H: innerHeight, dpr: devicePixelRatio || 1, touch: navigator.maxTouchPoints || 0 }; if (r && r.img) img.src = r.img; sendB.disabled = false; sendB.textContent = '送る'; });
   }
   // 止めた画面と赤ペンを1枚の絵に（大きすぎたら小さく）

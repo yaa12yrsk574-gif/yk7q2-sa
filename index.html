@@ -2,11 +2,16 @@
 <html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>設計図アクション試作</title>
+<script>/* github.io で開いたら claude.ai 版へ自動で飛ぶ（💢と作品のクラウドはあっちだけ）。
+   ネットなし（展示）・?here 付き・届いてへん💢がある時はここに残る */
+(function(){try{if(!/github\.io$/.test(location.hostname)||!navigator.onLine||/[?&]here/.test(location.search))return;
+var n=0;try{n=(+JSON.parse(localStorage.getItem('stress_unsent_n')||'0'))||0;var o=JSON.parse(localStorage.getItem('stress_local')||'null');if(o&&o.length)n+=o.length;}catch(e){}
+if(!n)location.replace('https://claude.ai/artifact/TgUYw7r6vbmovyCYbEt4cC');}catch(e){}})();</script>
 <link rel="stylesheet" href="shell.css?v=edc8b6370447"></head><body>
 <iframe id="fGame" class="on" title="狩り場"></iframe><iframe id="fTool" title="工房"></iframe>
 <div id="tabs" style="display:none"><button data-t="game" class="on" style="opacity:1;background:#d9572b">⛺ 狩り場へ戻る</button><button data-t="tool" style="display:none">工房</button><span id="cloudSt"></span></div>
 <script src="shared/project-data.js?v=bee291e8a4e1"></script>
 <script src="shared/storage.js?v=a551dd3e6396"></script>
 <script src="shared/input.js?v=5c8ce66cf4c1"></script>
-<script src="shared/stress-ui.js?v=efcc3916deb7"></script>
+<script src="shared/stress-ui.js?v=2858ba3fed0b"></script>
 <script src="shell.js?v=36b5ec73ee78"></script></body></html>
