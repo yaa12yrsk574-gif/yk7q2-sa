@@ -2,7 +2,7 @@
 
 
 
-const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=af45090d4db9'; let toolLoaded = false;
+const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=f386f3bfad64'; let toolLoaded = false;
 // 狩り場はiframe。子だけのblurでは、画面分割やウィンドウ切替で取り逃す場合がある
 window.__gameOn = true;
 window.__openTool = () => document.querySelector('#tabs button[data-t="tool"]').click();
@@ -13,7 +13,7 @@ addEventListener('pagehide', stopGameMovement);
 document.addEventListener('visibilitychange', () => { if (document.hidden) stopGameMovement(); });
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
-  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=e9720fe742b6'; }
+  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=b1abb586f0d3'; }
   if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); fG.contentWindow.focus(); } catch (_) {} } else { try { fT.contentWindow.focus(); } catch (_) {} } });
 
 // <bone_sync>
@@ -26,4 +26,4 @@ window.__boneOuter = true;
 boneCloud({ use: n => { try { return window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null); } catch (_) { return Promise.resolve(null); } },
   status: (t, warn) => { const e = document.getElementById('cloudSt'); e.textContent = t.replace('（手元には残ってる）', '').replace('この端末に保存', ''); e.style.color = warn ? '#ffb199' : ''; },
   onWorks: () => { try { fG.contentWindow.__field.refresh(); } catch (_) {} },
-  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=e9720fe742b6'; } });
+  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=b1abb586f0d3'; } });

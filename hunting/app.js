@@ -85,6 +85,7 @@ function bodyPaintGeometry(G, bone, defaultColor) {
 
 
 
+const PC_HIDDEN=new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide});
 function updateBodyDetails(lines,meshes,group){
   const active=(lines||[]).filter(s=>Array.isArray(s.pts)&&s.pts.length>1&&meshes.has(s.id));
   for(let i=0;i<active.length;i++){
@@ -104,15 +105,19 @@ class BoneBody { constructor(data, color) { this.D = prepData(data); this.g = ne
         const v=m.geometry.attributes.position.array;
         for(let j=0;j<G.I.length;j++){const src=G.I[j]*3,dst=j*3;v[dst]=G.V[src];v[dst+1]=G.V[src+1];v[dst+2]=G.V[src+2];}
         m.geometry.attributes.position.needsUpdate=true;m.geometry.computeVertexNormals();
+        if(m.userData.pc)PaintCut.update(m.userData.pc.geometry,G); /* 線で割った塗りも一緒に動かす */
       } else {
-        if(m){m.geometry.dispose();this.g.remove(m);}
+        if(m){if(m.userData.pc)m.userData.pc.geometry.dispose();m.geometry.dispose();this.g.remove(m);}
         const g=bodyPaintGeometry(G,b,this.baseColor);
-        m=new THREE.Mesh(g,this.mat);this.g.add(m);
+        if(window.PaintCut&&PaintCut.has(b)){ /* 元の三角は見えない芯（顔ライン・光る跡が使う）、見た目は割った形 */
+          m=new THREE.Mesh(g,PC_HIDDEN);const pm=new THREE.Mesh(PaintCut.build(THREE,G,b,this.baseColor),this.mat);m.add(pm);m.userData.pc=pm;
+        } else m=new THREE.Mesh(g,this.mat);
+        this.g.add(m);
       }
       keep.set(b.id,m); }
-    for (const [id, m] of this.meshes) if (!keep.has(id)) { m.geometry.dispose(); this.g.remove(m); } this.meshes = keep; updateBodyDetails(this.D.detailLines,this.meshes,this.details); }
+    for (const [id, m] of this.meshes) if (!keep.has(id)) { if (m.userData.pc) m.userData.pc.geometry.dispose(); m.geometry.dispose(); this.g.remove(m); } this.meshes = keep; updateBodyDetails(this.D.detailLines,this.meshes,this.details); }
   joints(P) { const out = []; for (const b of this.D.bones) { const pts = P && P[b.id] && P[b.id].length === b.pts.length ? P[b.id] : b.pts; pts.forEach((p, i) => out.push({ k: b.id + '_' + i, v: new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(this.g.matrixWorld) })); } return out; }
-  dispose() { for (const m of this.meshes.values()) m.geometry.dispose(); for(const l of this.details.children){l.geometry.dispose();l.material.dispose();} this.mat.dispose(); scene.remove(this.g); } }
+  dispose() { for (const m of this.meshes.values()) { if (m.userData.pc) m.userData.pc.geometry.dispose(); m.geometry.dispose(); } for(const l of this.details.children){l.geometry.dispose();l.material.dispose();} this.mat.dispose(); scene.remove(this.g); } }
 // ============ ツノトカゲの設計図（骨だけ） ============
 function tokageData() { return TPL.data('tokage'); } // 骨と動きのお手本は tpl_lib.js
 // ============ 調査隊員（プレイヤー） ============

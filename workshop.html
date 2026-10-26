@@ -22,6 +22,7 @@
     <span id="paintDot" style="position:absolute;width:13px;height:13px;box-sizing:border-box;border:2px solid white;border-radius:50%;box-shadow:0 0 0 1px #3339;transform:translate(-50%,-50%);pointer-events:none"></span>
   </div>
   <input id="paintHue" aria-label="色相" type="range" min="0" max="360" value="0" style="width:100%;margin:0;accent-color:#d9572b;background:linear-gradient(to right,red,#ff0,#0f0,#0ff,#00f,#f0f,red);border-radius:12px">
+  <button class="btn" id="cutEraseBtn" style="width:100%">線を消す</button>
 </div>
   <div class="seg" id="views"><button data-p="front">正面<span class="kb">1</span></button><button data-p="q">ナナメ<span class="kb">2</span></button><button data-p="side">横<span class="kb">3</span></button><button data-p="top">上<span class="kb">4</span></button><button data-p="back">後ろ<span class="kb">5</span></button></div>
   <div class="seg" id="elm" style="display:none"><button data-e="v" class="on">点</button><button data-e="e">線</button><button data-e="f">面</button></div>
@@ -41,8 +42,9 @@
 <script src="shared/storage.js?v=a551dd3e6396"></script>
 <script src="shared/templates.js?v=3a1da99f5b91"></script>
 <script src="shared/bones.js?v=a13370f37c9a"></script>
+<script src="shared/paint-cut.js?v=5966d010acb5"></script>
 <script src="shared/movement.js?v=35764e28e9ab"></script>
-<script src="workshop/app.js?v=f6bbb59f1c84"></script>
+<script src="workshop/app.js?v=5ca59feef727"></script>
 </body>
 </html>
 
