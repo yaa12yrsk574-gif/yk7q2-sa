@@ -99,7 +99,7 @@ function updateBodyDetails(lines,meshes,group){
   while(group.children.length>active.length){const l=group.children[group.children.length-1];group.remove(l);l.geometry.dispose();l.material.dispose();}
 }
 class BoneBody { constructor(data, color) { this.D = prepData(data); this.g = new THREE.Group(); this.details = new THREE.Group(); this.g.add(this.details); this.mat = matBody(0xffffff); this.mat.vertexColors = true; this.baseColor = color; this.meshes = new Map(); this.setPose(null); scene.add(this.g); }
-  setPose(P) { S = this.D; const keep = new Map(); for (const b of this.D.bones) { const tb = P && P[b.id] && P[b.id].length === b.pts.length ? Object.assign({}, b, { pts: P[b.id] }) : b; const G = boneGeom(tb); if (!G) continue;
+  setPose(P) { S = this.D; this.P = P; const keep = new Map(); for (const b of this.D.bones) { const tb = P && P[b.id] && P[b.id].length === b.pts.length ? Object.assign({}, b, { pts: P[b.id] }) : b; const G = boneGeom(tb); if (!G) continue;
       let m = this.meshes.get(b.id);
       if (m && m.geometry.attributes.position.count === G.I.length) {
         const v=m.geometry.attributes.position.array;
@@ -336,7 +336,7 @@ function makeBlueprint(kind) { const L = loadWorks(), now = Date.now(), data = T
   try { localStorage.setItem(WORKS_KEY, JSON.stringify(L)); localStorage.setItem(BP_KEY, String((+localStorage.getItem(BP_KEY) || 0) + 1)); } catch (_) {} updBP(); return w; }
 const hasBlueprint = kind => loadWorks().some(w => TPL.detect(w.data) === kind);
 function nearWild() { let best = null, bd = 2.4; for (const w of wilds) { if (w.mode === 'circle') continue; const d = Math.hypot(w.x - pl.x, w.z - pl.z); if (d < bd) { bd = d; best = w; } } return best; }
-function lookAt() { const w = nearWild(); if (!w) return;
+function lookAt() { if (DREAM.borrowing()) { DREAM.borrowEnd(); return; } if (DREAM.canBorrow()) { DREAM.borrowStart(); return; } const w = nearWild(); if (!w) return;
   if (hasBlueprint(w.kind)) { msg(w.name + '：もう設計図はある。工房の「作品」にあるで'); return; }
   const work = makeBlueprint(w.kind); msg(w.name + 'を調べた！ ' + TPL.KINDS[w.kind].name + 'の設計図を手に入れた（工房の「作品」）'); if (!mate) setMate(work); }
 document.getElementById('lookBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (window.parent.__editorInput.intent(e) !== 'primary') return; lookAt(); });
@@ -350,12 +350,12 @@ const rival = (() => { try {
     keys.push({ f, pose: TPL.poseOf('tokage', { dy: -0.1 + 0.03 * Math.cos(2 * ph), sway: 0.08 * Math.sin(ph), neckYaw: -0.1 * Math.sin(ph), neckPitch: -0.22, tailYaw: 0.7 * Math.sin(ph + 1.2), tailPitch: 0.22, legs }) }); }
   const anim = { len: 10, loop: true, keys, seg: {} }, q = measureGaitQuality(d, anim, 'run'), P = window.BodyMotion.perf(d.size, q.factor, 'run');
   const body = new BoneBody(d, 0x7c5a9e); body.g.scale.setScalar(d.size);
-  return { body, anim, speed: P.top, size: d.size, th: 0, ph: 0, cx: 0, cz: -68.5, R: 9.5, seen: false };
+  return { d, body, anim, speed: P.top, size: d.size, th: 0, ph: 0, cx: 0, cz: -68.5, R: 9.5, seen: false, mode: 'circle' };
 } catch (e) { console.warn(e); return null; } })();
-function stepRival(dt) { if (!rival) return; const r = rival; r.th += r.speed / r.R * dt; const x = r.cx + Math.cos(r.th) * r.R, z = r.cz + Math.sin(r.th) * r.R;
+function stepRival(dt) { if (!rival) return; if (!OLD_CAMP.found && Math.hypot(pl.x - OLD_CAMP.x, pl.z - OLD_CAMP.z) < 3) { OLD_CAMP.found = true; msg('前の調査隊の野営地を見つけた'); } if (DREAM.ownsRival()) { DREAM.rivalTick(dt); return; } const r = rival; r.th += r.speed / r.R * dt; const x = r.cx + Math.cos(r.th) * r.R, z = r.cz + Math.sin(r.th) * r.R;
   r.ph = (r.ph + Math.min(r.speed / r.size / 0.56, 3.2) * dt) % 1; bodyFrame(r.body, r.anim, r.ph * r.anim.len);
   r.body.g.position.set(x, 0, z); r.body.g.rotation.y = Math.atan2(-Math.sin(r.th), Math.cos(r.th));
-  if (!OLD_CAMP.found && Math.hypot(pl.x - OLD_CAMP.x, pl.z - OLD_CAMP.z) < 3) { OLD_CAMP.found = true; msg('前の調査隊の野営地を見つけた'); } }
+}
 // ============ 相棒（乗って動かす） ============
 let mate = null;
 // 速さで歩き／走りを切りかえ、足の回転は上限まで
@@ -397,7 +397,7 @@ const closePick = () => document.getElementById('pickDlg').classList.remove('sho
 document.getElementById('mateBtn').onclick = () => { renderPick(); document.getElementById('pickDlg').classList.add('show'); };
 document.getElementById('pickClose').onclick = closePick;
 function updBP() { let n = 0; try { n = +localStorage.getItem(BP_KEY) || 0; } catch (_) {} document.getElementById('bp').textContent = '設計図 ' + n; } updBP();
-window.__fieldDebug = () => ({ pl, mate, boulder, rival, wilds, setMate, applyMateSize, makeBlueprint, groundAt, setTestSize: v => { testSize = v; applyMateSize(); }, press: () => spaceDown(), release: () => spaceUp() }); /* 検証用 */
+window.__fieldDebug = () => ({ dream: () => DREAM.state(), DREAM, pl, get mate() { return mate; },  boulder, rival, wilds, setMate, applyMateSize, makeBlueprint, groundAt, setTestSize: v => { testSize = v; applyMateSize(); }, press: () => spaceDown(), release: () => spaceUp() }); /* 検証用 */
 window.__field = { refresh() { if (mate) { const w = loadWorks().find(x => x.id === mate.work.id); if (w) { const keep = { x: mate.x, z: mate.z, y: mate.y, yaw: mate.yaw }; setMate(w); Object.assign(mate, keep); } } updBP(); } };
 // ============ ⚙ 大きさと動きの調整（数値はこの端末に保存） ============
 const TUNE_ROWS = [['camH', 'カメラの高さ', 0.5, 2, 0.05], ['camD', 'カメラの距離', 0.5, 2, 0.05], ['jumpV', 'ジャンプの強さ', 3, 10, 0.1], ['gravity', '重力', 6, 30, 0.5], ['flapV', '羽ばたきの強さ', 1, 10, 0.1], ['glideSink', '滑空で落ちる速さ', 0.2, 4, 0.1], ['glideSpeed', '滑空の速さ', 2, 10, 0.1], ['swimSpeed', '泳ぐ速さ', 0.5, 5, 0.1], ['padStroke', '羽ばたき1回の指の幅', 60, 320, 5], ['airTurn', '空中の旋回', 0.5, 4, 0.1], ['airMax', '飛行の最高速', 3, 25, 0.5], ['airAccel', '飛行の直線加速', 0.5, 8, 0.1], ['airCam', '飛行カメラの追いつき', 0.3, 4, 0.1], ['accel', '加速', 2, 20, 0.5], ['turn', '小回り', 2, 15, 0.5], ['agiExp', '大きさで鈍る効き', 0, 1.5, 0.05], ['weightExp', '大きい＝重さの壁', 0, 1.5, 0.05]];
@@ -545,9 +545,108 @@ function stepMate(dt, mx, mz, ml, moving, walking, rx, rz) { const m = mate, T =
   const bob = m.st === 'swim' ? -0.12 * m.size + Math.sin(performance.now() / 300) * 0.02 : 0;
   m.body.g.position.set(m.x, m.y + bob, m.z); m.body.g.rotation.set(0, m.yaw, m.bank || 0);
   pl.x = m.x; pl.z = m.z; pl.y = m.y + bob; pl.yaw = m.yaw; }
+// ============ 夢（最初の1周）：ゴツいの大ジャンプ → 相棒が見とれてマネしてコケる → 跳びたいゲージ → ゴツいを借りて体で分かる → 工房（もう見られへん）→ 叶う ============
+const LEDGE = { x: 0, z: -68.5, half: 1.3, top: 1.75 }; // 盆地のまん中の岩棚。お手本のジャンプ（1.28m）では届かへん
+addBox(LEDGE.x - LEDGE.half, LEDGE.x + LEDGE.half, LEDGE.z - LEDGE.half, LEDGE.z + LEDGE.half, LEDGE.top);
+const FRUIT = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), new THREE.MeshStandardMaterial({ color: 0xffb13b, emissive: 0xff7a00, emissiveIntensity: 0.7, roughness: 0.6 }));
+FRUIT.position.set(LEDGE.x + 0.75, LEDGE.top + 0.17, LEDGE.z - 0.75); scene.add(FRUIT);
+const DREAM = (() => {
+  const KEY = 'yuya_dream_jump_v1', NEED = LEDGE.top, PERCH = { x: LEDGE.x - 0.55, z: LEDGE.z + 0.55 };
+  const ld = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { return {}; } };
+  const put = patch => { if (!mate || !mate.work || borrow) return; const all = ld(), id = mate.work.id; all[id] = Object.assign({ seen: 0, best: 0, done: 0 }, all[id] || {}, patch); try { localStorage.setItem(KEY, JSON.stringify(all)); } catch (_) {} };
+  const rec = () => (!mate || !mate.work || borrow) ? null : (ld()[mate.work.id] || null);
+  // ゴツいのジャンプ：溜めが深くて長い、踏み切りは一瞬（お手本より速く伸びる）
+  const K = (f, o) => ({ f, pose: TPL.poseOf('tokage', o) }), tuck = d => ({ 5: [0.06, d, 0], 6: [0.06, d, 0], 7: [-0.06, d, 0], 8: [-0.06, d, 0] });
+  const RJ = { len: 14, loop: false, keys: [K(0, {}), K(6, { dy: -0.26, arch: -0.05, neckPitch: 0.34, tailPitch: 0.22 }), K(7, { dy: 0.1, neckPitch: -0.38, tailPitch: -0.28 }), K(14, { dy: 0.06, neckPitch: -0.1, tailPitch: -0.05, legs: tuck(0.24) })], seg: {} };
+  const RA = rival ? animsFor(rival.d) : {};
+  let actBest = 0, st = 'idle', t = 0, tries = 0, lock = false, focus = null, borrow = null, slow = false, flop = 0, air = null, groundY = 0, hudT = 0, xray = null, look = 0;
+  const hud = document.createElement('div'); hud.id = 'dreamHud';
+  hud.style.cssText = 'position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 108px);transform:translateX(-50%);z-index:9;display:none;align-items:center;gap:10px;background:rgba(250,247,241,.94);border-radius:14px;padding:7px 12px;box-shadow:0 3px 14px rgba(0,0,0,.18);font:800 13px "Hiragino Sans",sans-serif;color:#2b2a27;white-space:nowrap';
+  hud.innerHTML = '<span id="dhL">🦎 跳びたい</span><span style="position:relative;width:150px;height:12px;border-radius:6px;background:#e3ddd2;overflow:hidden"><i id="dhB" style="position:absolute;left:0;top:0;bottom:0;width:0;background:#e2a23b;border-radius:6px;transition:width .25s"></i><i id="dhN" style="position:absolute;top:0;bottom:0;width:2px;background:#2b2a27;opacity:.25"></i></span><span id="dhT"></span><button class="btn" id="dhSlow" style="display:none">🐢 スロー</button><button class="btn" id="dhBack" style="display:none">↩ 返す</button>';
+  document.body.appendChild(hud);
+  const $h = id => document.getElementById(id);
+  $h('dhSlow').addEventListener('pointerdown', e => { e.preventDefault(); slow = !slow; $h('dhSlow').style.background = slow ? '#2b2a27' : ''; $h('dhSlow').style.color = slow ? '#fff' : ''; });
+  $h('dhBack').addEventListener('pointerdown', e => { e.preventDefault(); borrowEnd(); });
+  const headP = (o, h) => new THREE.Vector3(o.x, (o.y || 0) + h, o.z);
+  const rivalPos = () => new THREE.Vector3(rival.x, rival.y, rival.z);
+  const onLedge = o => Math.abs(o.x - LEDGE.x) < LEDGE.half && Math.abs(o.z - LEDGE.z) < LEDGE.half && o.y > LEDGE.top - 0.06;
+  // ---- ゴツい：岩棚の縁まで走って、深く溜めて、一気に跳び乗る。上で実を守ってこっちを見る ----
+  function rivalStart() { const r = rival; if (r.mode && r.mode !== 'circle') return; r.x = r.cx + Math.cos(r.th) * r.R; r.z = r.cz + Math.sin(r.th) * r.R; r.y = 0; r.yaw = Math.atan2(-Math.sin(r.th), Math.cos(r.th)); r.mode = 'toEdge'; r.t = 0; }
+  function rivalTick(dt) { const r = rival; r.t += dt; let A = null, f = 0;
+    if (r.mode === 'toEdge') { const dx = r.x - LEDGE.x, dz = r.z - LEDGE.z, L = Math.hypot(dx, dz) || 1, ex = LEDGE.x + dx / L * (LEDGE.half + 1.1), ez = LEDGE.z + dz / L * (LEDGE.half + 1.1), ddx = ex - r.x, ddz = ez - r.z, dd = Math.hypot(ddx, ddz);
+      if (dd > 0.12) { const sp = Math.min(dd / dt, 3.2); r.x += ddx / dd * sp * dt; r.z += ddz / dd * sp * dt; r.yaw = turnTo(r.yaw, Math.atan2(ddx, ddz), dt * 8); r.ph = (r.ph + 2.2 * dt) % 1; A = r.anim; f = r.ph * A.len; }
+      else { r.yaw = turnTo(r.yaw, Math.atan2(LEDGE.x - r.x, LEDGE.z - r.z), dt * 10); A = RA.idle; f = 0; if (r.t > 0.35 + (dd > 0 ? 0 : 0)) { r.mode = 'crouch'; r.t = 0; r.sx = r.x; r.sz = r.z; } } }
+    else if (r.mode === 'crouch') { A = RJ; f = Math.min(6, r.t * 9); if (r.t > 1.0) { r.mode = 'leap'; r.t = 0; } }
+    else if (r.mode === 'leap') { const D = 0.72, u = Math.min(1, r.t / D); r.x = r.sx + (PERCH.x - r.sx) * u; r.z = r.sz + (PERCH.z - r.sz) * u; r.y = NEED * u + 1.0 * Math.sin(Math.PI * u); A = RJ; f = Math.min(14, 6 + u * 12);
+      if (u >= 1) { r.y = NEED; r.mode = 'landT'; r.t = 0; pop(rivalPos().add(new THREE.Vector3(0, 1.4, 0)), 'ドン！', '#fff', 30); } }
+    else if (r.mode === 'landT') { A = RA.land; f = Math.min(A ? A.len : 0, r.t * 24); if (r.t > 0.5) { r.mode = 'perch'; r.t = 0; } }
+    else if (r.mode === 'perch') { A = RA.idle; f = A ? (r.t * 24) % A.len : 0; r.yaw = turnTo(r.yaw, Math.atan2(pl.x - r.x, pl.z - r.z), dt * 2); }
+    if (r.mode === 'borrowed') return;
+    if (A) bodyFrame(r.body, A, f); else r.body.setPose(null);
+    r.body.g.position.set(r.x, r.y, r.z); r.body.g.rotation.y = r.yaw; }
+  // ---- 相棒の芝居：見とれる → マネして跳ぶ → ベチャ → もう一回 → ベチャ → こっちを見る ----
+  function startDemo(withActing) { rivalStart(); st = withActing ? 'watch' : 'live'; t = 0; tries = 0; if (withActing) { lock = true; clearMovementInput(); } }
+  function drive(dt) { const m = mate; let mx = 0, mz = 0; t += dt; if (!m) { lock = false; st = 'live'; return { mx, mz }; }
+    const toLedge = Math.atan2(LEDGE.x - m.x, LEDGE.z - m.z);
+    if (st === 'watch') { focus = headP(rival, 1.2 * rival.size); m.yaw = turnTo(m.yaw, Math.atan2(rival.x - m.x, rival.z - m.z), dt * 4);
+      if (rival.mode === 'perch' && !look) { look = t; pop(headP(m, m.info.h + 0.5), '……！', '#ffe27a', 26); }
+      if (look && t - look > 1.4) { st = 'walk'; t = 0; look = 0; } }
+    else if (st === 'walk') { focus = new THREE.Vector3(LEDGE.x, LEDGE.top * 0.6, LEDGE.z); const dx = m.x - LEDGE.x, dz = m.z - LEDGE.z, L = Math.hypot(dx, dz) || 1, ax = LEDGE.x + dx / L * (LEDGE.half + 0.55), az = LEDGE.z + dz / L * (LEDGE.half + 0.55), ddx = ax - m.x, ddz = az - m.z, dd = Math.hypot(ddx, ddz);
+      if (dd > 0.25 && t < 4) { mx = ddx / dd * 0.55; mz = ddz / dd * 0.55; } else { m.yaw = turnTo(m.yaw, toLedge, dt * 8); if (t > 4.4 || dd <= 0.25) { st = 'press'; t = 0; spaceDown(); } } }
+    else if (st === 'press') { focus = new THREE.Vector3(LEDGE.x, LEDGE.top * 0.6, LEDGE.z); m.yaw = turnTo(m.yaw, toLedge, dt * 8); if (t > 0.5 && spaceHeld) spaceUp();
+      if (m.lifted || t > 0.6) { mx = Math.sin(toLedge) * 0.5; mz = Math.cos(toLedge) * 0.5; } /* 跳んだら岩棚へ向かって体を寄せる */
+      if (t > 0.9 && !m.lifted && (m.st === 'ground' || m.st === 'land')) { if (onLedge(m)) { celebrate(); return { mx: 0, mz: 0 }; }
+        tries++; flop = 0.95; pop(headP(m, m.info.h * 0.6), 'ベチャ', '#fff', 26); st = 'flop'; t = 0; } }
+    else if (st === 'flop') { if (t > 1.15) { if (tries < 2) { st = 'press'; t = 0; spaceDown(); } else { st = 'look'; t = 0; } } }
+    else if (st === 'look') { focus = null; const cx = camEye ? camEye.x : pl.x, cz = camEye ? camEye.z : pl.z; m.yaw = turnTo(m.yaw, Math.atan2(cx - m.x, cz - m.z), dt * 3);
+      if (t > 0.7 && !look) { look = t; pop(headP(m, m.info.h + 0.5), '…', '#fff', 30); }
+      if (t > 2.0) { lock = false; focus = null; look = 0; put({ seen: 1, best: Math.max(actBest, (rec() || {}).best || 0) }); st = 'live'; hudT = 0; msg('相棒、あいつみたいに跳びたいらしい'); } }
+    return { mx, mz }; }
+  // ---- 叶った ----
+  function celebrate() { lock = false; focus = null; st = 'done'; const r = rec(); put({ done: 1, best: Math.max(NEED, r ? r.best : 0) }); hudT = 3.5;
+    pop(headP(mate, mate.info.h + 0.7), 'やった！！', '#ffd23b', 40); setTimeout(() => mate && pop(headP(mate, mate.info.h + 0.9), '♡', '#ff7aa8', 34), 450); setTimeout(() => mate && pop(headP(mate, mate.info.h + 1.0), '♡', '#ff7aa8', 30), 900);
+    msg('夢が叶った！ あいつと同じとこまで跳べた'); if (mate.st === 'ground' || mate.st === 'land') { mate.vy = 3.2; mate.y += 0.02; mate.st = 'air'; mate.lifted = true; mate.airT = 0; } }
+  // ---- 借りる：ゴツいの体とアニメのまま動かせる。スローと骨の透けつき。30秒で返す ----
+  function canBorrow() { const r = rec(); return !!(mate && !borrow && !lock && r && r.seen && !r.done && rival && rival.mode === 'perch' && Math.hypot(pl.x - rival.x, pl.z - rival.z) < 3.4); }
+  function borrowStart() { if (!canBorrow()) return; const d = clone(rival.d); d.acts = [{ slot: 'jump', name: 'ジャンプ', anim: RJ }, { slot: 'run', name: '走る', anim: rival.anim }]; d.actI = -1; d.size = rival.size;
+    borrow = { t: 30, prev: { work: mate.work, x: mate.x, z: mate.z, yaw: mate.yaw } };
+    setMate({ id: '__rival', name: 'ゴツいツノトカゲ（借りてる）', data: d }); mate.baseSize = rival.size; applyMateSize(); mate.x = rival.x; mate.z = rival.z; mate.y = rival.y; mate.yaw = rival.yaw; mate.st = 'ground';
+    rival.mode = 'borrowed'; rival.body.g.visible = false; xrayOn(); hudT = 0;
+    msg('ゴツいを借りた。溜めの深さと踏み切りの速さ、体で覚えて帰ろ'); }
+  function borrowEnd() { if (!borrow) return; const b = borrow; xrayOff(); slow = false; borrow = null;
+    setMate(b.prev.work); mate.x = b.prev.x; mate.z = b.prev.z; mate.y = groundAt(mate.x, mate.z, 0); mate.yaw = b.prev.yaw; pl.x = mate.x; pl.z = mate.z; pl.y = mate.y;
+    rival.mode = 'perch'; rival.t = 0; rival.x = PERCH.x; rival.z = PERCH.z; rival.y = NEED; rival.body.g.visible = true; air = null;
+    msg('返した。工房では、もうあいつは見られへん。覚えてる感じで作ってみ'); }
+  function xrayOn() { const m = mate; if (!m) return; m.body.mat.transparent = true; m.body.mat.opacity = 0.32; m.body.mat.depthWrite = false; m.body.mat.needsUpdate = true;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(600), 3)); const L = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xff3b2f, depthTest: false, transparent: true }));
+    L.renderOrder = 10; L.frustumCulled = false; scene.add(L); const J = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 6, sizeAttenuation: false, depthTest: false })); J.geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(600), 3)); J.renderOrder = 11; J.frustumCulled = false; scene.add(J); xray = { L, J }; }
+  function xrayOff() { if (!xray) return; scene.remove(xray.L); scene.remove(xray.J); xray.L.geometry.dispose(); xray.L.material.dispose(); xray.J.geometry.dispose(); xray.J.material.dispose(); xray = null; }
+  function xrayTick() { if (!xray || !mate) return; mate.body.g.updateMatrixWorld(true); const js = mate.body.joints(mate.body.P), seg = xray.L.geometry.attributes.position, pts = xray.J.geometry.attributes.position; let n = 0, k = 0;
+    for (let i = 0; i < js.length && k < 199; i++) { const a = js[i], idA = a.k.split('_')[0]; pts.setXYZ(k++, a.v.x, a.v.y, a.v.z); const b = js[i + 1]; if (b && b.k.split('_')[0] === idA && n < 198) { seg.setXYZ(n++, a.v.x, a.v.y, a.v.z); seg.setXYZ(n++, b.v.x, b.v.y, b.v.z); } }
+    xray.L.geometry.setDrawRange(0, n); xray.J.geometry.setDrawRange(0, k); seg.needsUpdate = true; pts.needsUpdate = true; }
+  // ---- 毎フレーム：きっかけ・跳んだ高さの記録・叶ったか・HUD ----
+  function tick(dt) { const m = mate;
+    if (flop > 0 && m) { flop -= dt; const e = Math.min(1, (0.95 - flop) / 0.12) * Math.min(1, flop / 0.35); m.body.g.rotation.z = (m.bank || 0) + 1.25 * e; } /* ベチャ：横に倒れて起き上がる */
+    if (borrow) { borrow.t -= dt; xrayTick(); if (borrow.t <= 0) borrowEnd(); }
+    if (st === 'idle' && m && m.A.jump && rival && (!rival.mode || rival.mode === 'circle') && Math.hypot(pl.x - LEDGE.x, pl.z - LEDGE.z) < 11 && (m.st === 'ground')) { const r = rec(); if (r && r.done) st = 'done'; else startDemo(!(r && r.seen)); }
+    if (m && !borrow) { if (m.st === 'ground' || m.st === 'charge' || m.st === 'swim') groundY = m.y;
+      if (m.lifted && !air) air = { g0: groundY, peak: m.y }; if (air) { air.peak = Math.max(air.peak, m.y); if (!m.lifted) { const h = air.peak - air.g0; air = null; const r = rec(); if (lock && h > actBest) actBest = h; /* マネで跳べた高さ＝ゲージの出発点 */
+        if (r && r.seen && !r.done && st === 'live' && h > 0.15) { if (h > (r.best || 0) + 0.01) { put({ best: h }); pop(headP(m, m.info.h + 0.6), h.toFixed(2) + 'm' + (h > (r.best || 0) && r.best ? ' 自己ベスト！' : ''), '#ffe27a', 22); } } } }
+      if (st === 'live' && !lock && onLedge(m) && (m.st === 'ground' || m.st === 'land')) { const r = rec(); if (r && r.seen && !r.done) celebrate(); } }
+    // HUD
+    const r = rec(), showGauge = !!(m && !borrow && r && r.seen && (!r.done || hudT > 0)); if (hudT > 0) hudT -= dt;
+    hud.style.display = borrow || showGauge ? 'flex' : 'none'; $h('dhSlow').style.display = $h('dhBack').style.display = borrow ? '' : 'none';
+    if (borrow) { $h('dhL').textContent = '🫳 ゴツいを借りてる'; $h('dhT').textContent = 'あと ' + Math.ceil(borrow.t) + '秒'; $h('dhB').parentNode.style.display = 'none'; }
+    else if (showGauge) { $h('dhB').parentNode.style.display = ''; const best = r.done ? NEED : (r.best || 0), cur = air ? Math.max(0, air.peak - air.g0) : 0, v = Math.max(best, cur);
+      $h('dhL').textContent = r.done ? '🦎 叶った！' : '🦎 跳びたい'; $h('dhB').style.width = Math.min(100, v / NEED * 100) + '%'; $h('dhB').style.background = r.done ? '#3bb06a' : '#e2a23b'; $h('dhN').style.left = Math.min(99, (best / NEED) * 100) + '%';
+      $h('dhT').textContent = (best ? best.toFixed(2) : '0.00') + 'm / ' + NEED.toFixed(2) + 'm'; } }
+  return { tick, drive, rivalTick, borrowStart, borrowEnd, canBorrow, celebrate,
+    locked: () => lock, focus: () => focus, slowOn: () => slow && !!borrow, borrowing: () => !!borrow, ownsRival: () => !!(rival && rival.mode && rival.mode !== 'circle'), state: () => ({ st, t, tries, lock, rec: rec(), rival: rival && rival.mode, borrow: !!borrow }) };
+})();
 // 影（空中で高さが分かるように）
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })); shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
 // ============ ループ ============
+let dreamLookK = 0; const dreamLookP = new THREE.Vector3();
 let last = performance.now(), camS = null, camPos = null, camLook = null, camEye = null, camAhead = 0;
 let loopErr = ''; function loop(now) { requestAnimationFrame(loop); try { step(now); } catch (e) { const m = String(e && e.message || e); if (m !== loopErr) { loopErr = m; const el = document.getElementById('dbg'); el.textContent = '止まった理由：' + m; el.style.display = 'block'; } } }
 function step(now) {
@@ -555,7 +654,7 @@ function step(now) {
   const away = window.__paused || document.hidden || pcFocusLost; /* iPadはiframeにフォーカスが来ないので、フォーカスで止めない */
   document.getElementById('pauseV').style.display = away && !window.__paused ? 'flex' : 'none';
   if (away) { clearMovementInput(); last = now; return; }
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  let dt = Math.min(0.05, (now - last) / 1000); last = now; if (DREAM.slowOn()) dt *= 0.4; /* 借りてる間のスロー */
   if (keys.size && (!document.hasFocus() || (window.parent !== window && !window.parent.document.hasFocus()))) clearKeys();
   let mx = 0, mz = 0;
   if (keys.has('w') || keys.has('arrowup')) mz -= 1;
@@ -564,12 +663,14 @@ function step(now) {
   if (keys.has('d') || keys.has('arrowright')) mx += 1;
   if (joy) { mx += joy.dx; mz += joy.dy; }
   const rx = mx, rz = mz, cs = Math.sin(camYaw), cc = Math.cos(camYaw); mx = -cs * rz - cc * rx; mz = -cc * rz + cs * rx; /* カメラの向き基準 */
+  if (DREAM.locked()) { const q = DREAM.drive(dt); mx = q.mx; mz = q.mz; } /* 相棒の芝居中は勝手に動く */
   const ml = Math.hypot(mx, mz), moving = ml > 0.1, walking = keys.has('shift'); stickFwd = ml > 0.3 && -rz > 0.7 * Math.hypot(rx, rz); /* ほぼ前に倒してる時だけ */
-  if (mate) stepMate(dt, mx, mz, ml, moving, walking, rx, rz);
+  if (mate) stepMate(dt, mx, mz, ml, moving, walking, DREAM.locked() ? 0 : rx, DREAM.locked() ? 0 : rz);
   else { spaceEdge = 0; spaceUpEdge = 0; rpad.released = false; rpad.pend.length = 0; if (moving) { const sp = Math.min(1, ml) * 3.4; pl.x += mx / ml * sp * dt; pl.z += mz / ml * sp * dt; pl.yaw = Math.atan2(mx, mz); }
     const me = { h: 1.5, r: 0.3, power: 0.3 }; touchBoulder(pl, me.r, me); collide(pl, me.r, me); holeHint(pl, me); pl.y = groundAt(pl.x, pl.z, pl.y); }
   pl.g.position.set(pl.x, mate ? pl.y + mate.seatY : pl.y + (moving ? Math.abs(Math.sin(now / 90)) * 0.05 : 0), pl.z);
   pl.g.rotation.y = pl.yaw;
+  DREAM.tick(dt);
   for (const w of wilds) stepWild(w, dt);
   stepRival(dt);
   BIRD.tick(dt);
@@ -581,11 +682,12 @@ function step(now) {
     if (wing) { const H = window.BodyMotion.load().padStroke, hn = (wAt(mate.wp, mate.wp.th, mate.wf) - mate.wp.lo) / mate.wp.R; el.className = mate.lift > 0.4 ? 'lift' : mate.gl ? 'glide' : ''; el.style.height = H + 'px'; el.style.left = (rpad.x0 - 15) + 'px'; el.style.top = rpad.railTop + 'px'; el.firstChild.style.top = ((1 - hn) * H) + 'px'; }
     else if (jmp) { const H = 90; el.className = 'jump'; el.style.height = H + 'px'; el.style.left = (rpad.x0 - 15) + 'px'; el.style.top = (rpad.y0 - 10) + 'px'; el.firstChild.style.top = (10 + Math.max(0, Math.min(70, rpad.y - rpad.y0))) + 'px'; } }
   // ボタン：キャンプ＝工房、野生の子の近く＝調べる
-  { const c = inCamp(pl.x, pl.z, pl.y), bn = !c && BIRD.near(), nw = !c && !bn && pl.y < 0.6 && nearWild(); document.getElementById('campBtn').style.display = c ? 'block' : 'none'; document.getElementById('birdBtn').style.display = bn ? 'block' : 'none'; const lb = document.getElementById('lookBtn'); lb.style.display = nw ? 'block' : 'none'; if (nw) lb.firstChild.textContent = '🔍 ' + nw.name + 'を調べる'; }
+  { const c = inCamp(pl.x, pl.z, pl.y), bn = !c && BIRD.near(), nw = !c && !bn && pl.y < 0.6 && nearWild(); document.getElementById('campBtn').style.display = c ? 'block' : 'none'; document.getElementById('birdBtn').style.display = bn ? 'block' : 'none'; const lb = document.getElementById('lookBtn'), cb = !c && !bn && DREAM.canBorrow(), rb = DREAM.borrowing(); lb.style.display = nw || cb || rb ? 'block' : 'none'; if (rb) lb.firstChild.textContent = '↩ 返す'; else if (cb) lb.firstChild.textContent = '🫳 ゴツいを借りる'; else if (nw) lb.firstChild.textContent = '🔍 ' + nw.name + 'を調べる'; }
   // カメラ：乗り手の後ろ斜め上・低め。大きい子ほど高く引き、小さい子ほど地面すれすれに寄る。高さにも付いていく
   { const T = window.BodyMotion.load(), k = Math.max(1, 1.25 / Math.max(0.45, W / H)), want = mate ? Math.pow(mate.size, 0.75) : 0.85;
     camS = camS == null ? want : camS + (want - camS) * (1 - Math.exp(-dt * 3)); const c = camS, a = 1 - Math.exp(-dt * 7), yy = pl.y;
     if (camHold > 0) camHold -= dt;
+    { const fo = DREAM.focus(); if (fo) { camYawT = Math.atan2(fo.x - pl.x, fo.z - pl.z); camHold = Math.max(camHold, 0.4); } } /* 芝居中は見せたい所の方へ */
     const flyCam = !!(mate && mate.canFly && isAirSt(mate) && mate.y > groundAt(mate.x, mate.z, mate.y) + 0.3);
     if (flyCam) { if (camHold <= 0) camYawT = turnTo(camYawT, mate.yaw, dt * T.airCam); } /* 飛んでる間は背中へ、遅れてヌルっと追いつく（ベタ付けやと旋回で酔う）。手で回したらしばらくそっち */
     else if (camHold <= 0 && stickFwd) { const yw = mate ? mate.yaw : pl.yaw, spd = mate ? Math.min(1, mate.v / Math.max(0.5, mate.perfR.top)) : (moving ? 1 : 0), dd = Math.atan2(Math.sin(yw - camYawT), Math.cos(yw - camYawT)), w = Math.max(0, (Math.cos(dd) + 0.3) / 1.3); camYawT = turnTo(camYawT, yw, dt * 1.4 * w * spd); } /* 前に走ってる時だけ、ゆっくり背中側へ */
@@ -597,6 +699,7 @@ function step(now) {
     const P = new THREE.Vector3(camPos.x - fx * D, camPos.y + 3.0 * c * T.camH, camPos.z - fz * D); camLook = new THREE.Vector3(camPos.x + fx * camAhead, camPos.y + 0.55 * c, camPos.z + fz * camAhead);
     const eye = camClamp(new THREE.Vector3(camPos.x, camPos.y + Math.max(0.5, (mate ? mate.seatY : 1) + 0.3), camPos.z), P.clone());
     if (!camEye) camEye = eye.clone(); else camEye.lerp(eye, 1 - Math.exp(-dt * 14));
+    { const fo = DREAM.focus(); dreamLookK += ((fo ? 1 : 0) - dreamLookK) * (1 - Math.exp(-dt * 3)); if (fo) dreamLookP.copy(fo); if (dreamLookK > 0.01) camLook.lerp(dreamLookP, dreamLookK * 0.55); }
     cam.position.copy(camEye); cam.lookAt(camLook); updateCrowns(camEye.x, camEye.z, pl.x, pl.z, pl.y); }
   renderer.render(scene, cam); }
 // ============ 鳥人間：桟橋の先から海へ。羽ばたき＝スタミナ、気流と滑空はタダ、輪っかで回復 ============
