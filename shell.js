@@ -2,7 +2,7 @@
 
 
 
-const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=c96b7f171217'; let toolLoaded = false;
+const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=ce895921baef'; let toolLoaded = false;
 // 狩り場はiframe。子だけのblurでは、画面分割やウィンドウ切替で取り逃す場合がある
 window.__gameOn = true;
 window.__openTool = () => document.querySelector('#tabs button[data-t="tool"]').click();

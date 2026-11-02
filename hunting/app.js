@@ -965,7 +965,8 @@ window.__stressState = () => ({ mate: mate ? { name: mate.work.name, st: mate.st
 window.__sky = SKY; window.__glow = GLOW; window.__pad = () => ({ rpad, camYaw, camYawT, scrubWing, wAt }); window.__scene = scene; window.__mate = () => mate; /* 検証用 */
 addEventListener('error', e => { const el = document.getElementById('dbg'); el.textContent = 'エラー：' + (e.message || ''); el.style.display = 'block'; });
 // はじめて来た時：ツノトカゲの設計図を渡して乗せる。前に乗ってた子がいれば、いちばん新しい作品に乗る
-{ let L = loadWorks(); if (!L.length) { makeBlueprint('tokage'); L = loadWorks(); } if (L.length) setMate(L[0], false); else showHelp(); }
+{ let L = loadWorks(); if (!L.length) { makeBlueprint('tokage'); L = loadWorks(); } const tok = L.filter(w => TPL.detect(w.data) === 'tokage').sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0))[0]; /* 最初の1周はツノトカゲの夢。連れはツノトカゲから */
+  if (L.length) setMate(tok || L[0], false); else showHelp(); }
 // 検証用：描画を止めて n 秒ぶん早回し（tgt＝[x,z] へ左スティックで歩く）。テスト環境が遅いので
 window.__fieldSim = (sec, tgt, every, snap) => { const R = renderer.render; renderer.render = () => {}; let n = performance.now(); const out = [];
   try { for (let i = 0; i < sec * 30; i++) { n += 33.3; last = n - 33.3;
