@@ -628,7 +628,7 @@ const DREAM = (() => {
   function tick(dt) { const m = mate;
     if (flop > 0 && m) { flop -= dt; const e = Math.min(1, (0.95 - flop) / 0.12) * Math.min(1, flop / 0.35); m.body.g.rotation.z = (m.bank || 0) + 1.25 * e; } /* ベチャ：横に倒れて起き上がる */
     if (borrow) { borrow.t -= dt; xrayTick(); if (borrow.t <= 0) borrowEnd(); }
-    if (st === 'idle' && m && m.A.jump && rival && (!rival.mode || rival.mode === 'circle') && Math.hypot(pl.x - LEDGE.x, pl.z - LEDGE.z) < 11 && (m.st === 'ground')) { const r = rec(); if (r && r.done) st = 'done'; else startDemo(!(r && r.seen)); }
+    if (st === 'idle' && m && m.kind === 'tokage' && m.A.jump && rival && (!rival.mode || rival.mode === 'circle') && Math.hypot(pl.x - LEDGE.x, pl.z - LEDGE.z) < 11 && (m.st === 'ground')) { const r = rec(); if (r && r.done) st = 'done'; else startDemo(!(r && r.seen)); }
     if (m && !borrow) { if (m.st === 'ground' || m.st === 'charge' || m.st === 'swim') groundY = m.y;
       if (m.lifted && !air) air = { g0: groundY, peak: m.y }; if (air) { air.peak = Math.max(air.peak, m.y); if (!m.lifted) { const h = air.peak - air.g0; air = null; const r = rec(); if (lock && h > actBest) actBest = h; /* マネで跳べた高さ＝ゲージの出発点 */
         if (r && r.seen && !r.done && st === 'live' && h > 0.15) { if (h > (r.best || 0) + 0.01) { put({ best: h }); pop(headP(m, m.info.h + 0.6), h.toFixed(2) + 'm' + (h > (r.best || 0) && r.best ? ' 自己ベスト！' : ''), '#ffe27a', 22); } } } }
