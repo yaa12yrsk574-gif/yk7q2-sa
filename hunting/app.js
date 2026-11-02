@@ -206,7 +206,7 @@ boulder.m = new THREE.Mesh(new THREE.DodecahedronGeometry(boulder.r, 1), new THR
 // 木（幹は乗れない、葉っぱの上は飛んで越える）・岩（乗れる）・草むら
 { const rnd = (() => { let t = 12345; return () => (t = (t * 16807) % 2147483647) / 2147483647; })(), G = MAP.garden, V = VENUE;
   const ok = (x, z) => Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.r + 1.5 && Math.hypot(x - (MAP.hole.x0 + MAP.hole.x1) / 2, z - MAP.cliffZ1) > 3.2 && !(x > G.x0 - 1 && x < G.x1 + 1 && z > G.z0 - 1 && z < G.z1 + 1) && !(x > MAP.pond.x0 - 1.5 && x < MAP.pond.x1 + 1.5 && z > MAP.pond.z0 - 1.5 && z < MAP.pond.z1 + 1.5) && Math.hypot(x - 19.25, z + 43.75) > 3
-    && lineD(x, z, ROAD) > 3 && !(x > V.x0 - 3 && x < 21 && z < -104) && z > MAP.sea + 2 && !(z < MAP.cliffZ0 + 1.5 && z > MAP.cliffZ1 - 1.5) && !(x > 10 && x < 32 && z > -20 && z < -1) && lineD(x, z, [[[0, 0], [13.6, -9.4]]]) > 2.6 && Math.hypot(x - 11, z + 37) > 5 && lineD(x, z, [[[11, -37], [8.5, -26], [13, -17], [16.6, -11.4]], [[28.8, -12.4], [31, -16], [28.5, -36], [11, -37]]]) > 1.6; /* 草原の端の崖・案内の道・ゴツいのねぐらはあける */
+    && lineD(x, z, ROAD) > 3 && !(x > V.x0 - 3 && x < 21 && z < -104) && z > MAP.sea + 2 && !(z < MAP.cliffZ0 + 1.5 && z > MAP.cliffZ1 - 1.5) && !(x > 10 && x < 32 && z > -20 && z < -1) && lineD(x, z, [[[0, 0], [13.6, -9.4]]]) > 2.6 && Math.hypot(x - 11, z + 37) > 5 && lineD(x, z, [[[11, -37], [8.5, -26], [13, -17], [16.6, -11.4]], [[17.3, -16.6], [13, -17], [12.5, -26], [11, -37]]]) > 1.6; /* 草原の端の崖・案内の道・ゴツいのねぐらはあける */
   const T = [], Rk = [], clear = (x, z) => CLEARINGS.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r);
   for (let x = -57; x <= -3; x += 2.45) for (let z = -53; z <= -6; z += 2.45) { const tx = x + (rnd() - 0.5) * 1.3, tz = z + (rnd() - 0.5) * 1.3; if (ok(tx, tz) && lineD(tx, tz, TRAILS) > 2.1 && !clear(tx, tz) && rnd() > 0.08) T.push({ x: tx, z: tz, r: 0.22 + rnd() * 0.1, h: 3.2 + rnd() * 1.6 }); } // 森（獣道と広場はあける）
   for (let i = 0; i < 150; i++) { const x = -1 + rnd() * 58, z = -52 + rnd() * 64; if (x > 4.5 && x < 11.5) continue; if (!ok(x, z)) continue; if (rnd() < 0.4) T.push({ x, z, r: 0.25 + rnd() * 0.1, h: 3.4 + rnd() * 1.6 }); else Rk.push({ x, z, r: 0.35 + rnd() * 0.5 }); } // 右の草原
@@ -628,10 +628,10 @@ const DREAM = (() => {
     else if (r.mode === 'toFruit') { if (rivalWalk(r, dt, 0.9, RA.walk || r.anim, 0.36)) { r.mode = 'eat'; r.t = 0; r.ate = false; } }
     else if (r.mode === 'eat') { const fr = FRUITS.find(q => q.visible), fx = fr ? fr.position.x : TREE.x - 1.5, fz = fr ? fr.position.z : TREE.z - 0.8; r.yaw = turnTo(r.yaw, Math.atan2(fx - r.x, fz - r.z), dt * 8); A = EAT; f = Math.min(EAT.len, r.t * 20);
       if (!r.ate && f >= 8) { r.ate = true; takeFruit(); }
-      if (f >= EAT.len) { r.mode = 'leave'; r.path = [[25.6, -11.8]]; } }
-    else if (r.mode === 'leave') { if (rivalWalk(r, dt, 1.0, RA.walk || r.anim, 0.36)) { r.mode = 'drop'; r.t = 0; r.sx = r.x; r.sz = r.z; } }
-    else if (r.mode === 'drop') { const D = 0.5, u = Math.min(1, r.t / D); r.x = r.sx + (28.8 - r.sx) * u; r.z = r.sz + (-12.4 - r.sz) * u; r.y = NEED * (1 - u) + 0.4 * Math.sin(Math.PI * u); r.yaw = turnTo(r.yaw, Math.atan2(28.8 - r.sx, -12.4 - r.sz), dt * 8); A = RJ; f = 12;
-      if (u >= 1) { r.y = 0; r.mode = 'home'; r.path = [[31, -16], [28.5, -36], [REST.x, REST.z]]; } } /* 池の東を回って帰る */
+      if (f >= EAT.len) { r.mode = 'leave'; r.path = [[19.2, -13.9]]; } }
+    else if (r.mode === 'leave') { if (rivalWalk(r, dt, r.speed * 0.5, r.anim, 0.56)) /* 取ったらさっさと去る */ { r.mode = 'drop'; r.t = 0; r.sx = r.x; r.sz = r.z; } }
+    else if (r.mode === 'drop') { const D = 0.5, X = 17.3, Z = -16.6, u = Math.min(1, r.t / D); r.x = r.sx + (X - r.sx) * u; r.z = r.sz + (Z - r.sz) * u; r.y = NEED * (1 - u) + 0.4 * Math.sin(Math.PI * u); r.yaw = turnTo(r.yaw, Math.atan2(X - r.sx, Z - r.sz), dt * 8); A = RJ; f = 12;
+      if (u >= 1) { r.y = 0; r.mode = 'home'; r.path = [[13, -17], [12.5, -26], [REST.x, REST.z]]; } } /* 崖の左奥から降りて、こっちに背中を向けてねぐらへ（崖の裏に隠れへん） */
     else if (r.mode === 'home') { if (rivalWalk(r, dt, r.speed * 0.55, r.anim, 0.56)) { r.mode = 'rest'; r.t = 0; r.wt = 3; } }
     if (A) bodyFrame(r.body, A, f);
     r.body.g.position.set(r.x, r.y, r.z); r.body.g.rotation.y = r.yaw; }
@@ -671,7 +671,8 @@ const DREAM = (() => {
   function act(dt) { const m = mate; let q = { mx: 0, mz: 0, ml: 0, walk: true }; t += dt; G.pose = null; hookOn();
     if (st === 'arrive') { shot = 'watch'; face(m, LEDGE.x0, SPOT.z - 0.6, dt, 10); if (t > 0.9) { if (rival.mode !== 'rest' || rivalVisit(true)) { st = 'watch'; t = 0; } } }
     else if (st === 'watch') { shot = 'watch'; face(m, rival.x, rival.z, dt, 3);
-      if ((rival.mode === 'drop' || rival.mode === 'home') && !look) { look = t; pop(headP(m, m.info.h + 0.5), '……！', '#ffe27a', 26); }
+      if (rival.mode === 'drop' || rival.mode === 'home') G.gone = (G.gone || 0) + dt; else G.gone = 0;
+      if (!look && (rival.mode === 'rest' || (rival.mode === 'home' && (dist(rival, m) > 19 || G.gone > 4.5)))) { look = t; G.gone = 0; pop(headP(m, m.info.h + 0.5), '……！', '#ffe27a', 26); } /* 見えなくなるまで見送ってから */
       if (look && t - look > 1.5) { st = 'walk'; t = 0; look = 0; } }
     else if (st === 'walk' || st === 'back') { shot = 'watch'; q = go(m, MIMIC.x, MIMIC.z, 0.25, false); if (q.ml === 0 || t > 5) { face(m, LEDGE.x1, MIMIC.z, dt, 12); if (Math.abs(Math.atan2(Math.sin(m.yaw - Math.PI / 2), Math.cos(m.yaw - Math.PI / 2))) < 0.2 && t > 0.3) { st = 'press'; t = 0; aiDown(); } } }
     else if (st === 'press') { shot = 'watch'; face(m, LEDGE.x1, MIMIC.z, dt, 12); if (t > 0.5 && aiKey.held) aiUp();
@@ -687,9 +688,10 @@ const DREAM = (() => {
   function companion(dt) { if (!mate || borrow) return null; if (lock) return act(dt); if (st === 'call' || st === 'guide') return guide(dt); G.pose = null; return null; }
   // カメラの画：watch＝相棒の背中越しに崖とゴツい。plea＝相棒がこっちを見る
   function shotNow() { if (!shot || !mate) return null; const m = mate, mh = headP(m, m.info.h * 0.8);
-    if (shot === 'watch') { const edge = new THREE.Vector3(LAUNCH.x + 1.6, LEDGE.top * 0.9, LAUNCH.z + 0.4), up = rival && (st === 'watch') && rival.mode !== 'come' && rival.mode !== 'crouch' && rival.mode !== 'home';
-      const tgt = up ? headP(rival, 0.55 * rival.size) : edge; /* 来るまでは崖のふち（跳ぶ所）を見とく。ゴツいは左から画に入ってくる */
-      return { eye: new THREE.Vector3(SPOT.x - 3.6, 2.45, SPOT.z + 1.6), look: headP(m, 0.35).lerp(tgt, 0.5) }; }
+    if (shot === 'watch') { const edge = new THREE.Vector3(LAUNCH.x + 1.6, LEDGE.top * 0.9, LAUNCH.z + 0.4), follow = rival && (st === 'arrive' || st === 'watch') && !look && rival.mode !== 'rest';
+      if (!follow) return { eye: new THREE.Vector3(SPOT.x - 3.6, 2.45, SPOT.z + 1.6), look: headP(m, 0.35).lerp(edge, 0.5) }; /* マネの間は相棒と崖のふち */
+      const away = rival.mode === 'drop' || rival.mode === 'home'; /* 裏に降りて去る背中は、少し上から崖越しに見送る */
+      return { eye: new THREE.Vector3(SPOT.x - 3.6, away ? 3.0 : 2.45, SPOT.z + 1.6), look: headP(m, 0.35).lerp(headP(rival, 0.5 * rival.size), 0.78) }; } /* 来てから去るまでずっとゴツいを追う。相棒の背中は手前に残す */
     if (shot === 'plea' && G.pe) { return { eye: new THREE.Vector3(G.pe.x, G.pe.y, G.pe.z), look: headP(m, m.info.h * 0.6) }; }
     return null; }
   // ---- 叶った ----
