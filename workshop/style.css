@@ -55,3 +55,8 @@
 #recBtn.on { background:#c0392b; color:#fff; border-color:#c0392b; }
 #tl button.on { box-shadow:inset 0 0 0 2px #8a4fd0; }
 .spRow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 0 8px; font-size:12px; font-weight:800; color:var(--sub); } .spRow .btn { font-size:12px; padding:5px 9px; }
+
+  /* アニメの下パネル：いつも出てるのは「動き・再生・コマ・タイムライン」だけ。…で残りの道具 */
+  #tlMore { display:none; flex-direction:column; gap:4px; } #tl.more #tlMore { display:flex; } #tl.more #tlMoreBtn { box-shadow:inset 0 0 0 2px #8a4fd0; }
+  #tlMain .btn { padding:8px 12px; font-size:14px; } #tlMain #actSel { max-width:200px; } #tlMoreBtn { font-weight:900; min-width:44px; }
+  body.anim:not(.tlmore) #hint { bottom:calc(120px + env(safe-area-inset-bottom)); }
