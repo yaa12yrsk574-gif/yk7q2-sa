@@ -459,7 +459,7 @@ const snapshot = () => { const P = {}; for (const b of S.bones) P[b.id] = clone(
 var JUMP = { J: null, A: null, dirty: true, prevH: null, lastH: null };
 function isJumpAnim() { return mode === 'pose' && S.anim && S.acts && S.acts[S.actI] && S.acts[S.actI].slot === 'jump' && !S.anim.perf && window.JumpPhys; }
 function jumpInfo() { if (!isJumpAnim()) return null; if (!JUMP.dirty && JUMP.J && JUMP.A === S.anim) return JUMP.J;
-  const ids = S.bones.map(b => b.id), H = JumpPhys.com(S.rest || snapshot(), ids)[1]; JUMP.J = JumpPhys.analyze(S.anim, f => poseAt(f), ids, H, window.BodyMotion.load()); JUMP.A = S.anim; JUMP.dirty = false;
+  const ids = bodyIds(), H = JumpPhys.com(S.rest || snapshot(), ids)[1]; JUMP.J = JumpPhys.analyze(S.anim, f => poseAt(f), ids, H, window.BodyMotion.load()); JUMP.A = S.anim; JUMP.dirty = false;
   if (JUMP.J) { const h = JUMP.J.h; if (JUMP.lastH != null && Math.abs(h - JUMP.lastH) > 0.005) JUMP.prevH = JUMP.lastH; JUMP.lastH = h; } return JUMP.J; }
 const jumpArc = (J, f) => JumpPhys.arcAt(J, S.anim, f, window.BodyMotion.sizeOf(S));
 // 空中のコマ数＝滞空時間。踏み切りが変わったら、空中の原画は「放物線の何割の所か」で付いてくる
@@ -467,7 +467,8 @@ function jumpSync() { const J = jumpInfo(); if (!J) return; const A = S.anim, wa
   const oa = A.len - J.tk, na = want - J.tk, mp = f => f <= J.tk ? f : J.tk + Math.max(1, Math.min(na, Math.round((f - J.tk) * na / oa))), used = new Set(), seg = {};
   A.keys.sort((a, b) => a.f - b.f); const keep = []; for (const k of A.keys) { const of = k.f, nf = mp(of); if (used.has(nf)) continue; used.add(nf); if (A.seg && A.seg[of]) seg[nf] = A.seg[of]; k.f = nf; keep.push(k); }
   A.keys = keep; if (A.seg) A.seg = seg; for (const g of A.guides || []) g.f = mp(g.f); A.len = want; ANIM.f = Math.min(ANIM.f, want); pmCache.k = ''; trCache.key = ''; JUMP.dirty = true; }
-function applyPose(P) { if (P !== S.rest && mode === 'pose') { const J = jumpInfo(); if (J && ANIM.f > J.tk) P = JumpPhys.placeAt(P, S.bones.map(b => b.id), jumpArc(J, ANIM.f)); }
+const bodyIds = () => [(S.bones.find(b => b.parent == null) || S.bones[0]).id]; /* 重心＝胴（根っこの骨） */
+function applyPose(P) { if (P !== S.rest && mode === 'pose') { const J = jumpInfo(); if (J && ANIM.f > J.tk) P = JumpPhys.placeAt(P, bodyIds(), jumpArc(J, ANIM.f)); }
   for (const b of S.bones) if (P[b.id] && P[b.id].length === b.pts.length) b.pts = clone(P[b.id]); markSynced(); }
 
 
@@ -516,7 +517,7 @@ function drawActSel() { const el = $('actSel'); if (!S.acts) return; const sig =
   const tk = TPL.detect(S), tsl = tk ? TPL.slots(tk).map(x => x.slot) : [], have = new Set(S.acts.map(a => a.slot)), add = (k, lb, g) => { const o = document.createElement('option'); o.value = 't:' + k; o.textContent = lb; g.appendChild(o); };
   const miss = tsl.filter(k => !have.has(k) && SLOTS[k]); if (miss.length) { const g = document.createElement('optgroup'); g.label = 'この子に足す（お手本つき）'; for (const k of miss) add(k, '＋' + SLOTS[k].name, g); el.appendChild(g); } /* まだ作ってない動き（ジャンプ等）を上に */
   const g2 = document.createElement('optgroup'); g2.label = 'ほかの動き'; for (const k in SLOTS) if (!miss.includes(k)) add(k, '＋' + SLOTS[k].name + (tsl.includes(k) ? '（お手本つき）' : ''), g2); el.appendChild(g2); el.value = 'a:' + S.actI; }
-function switchAct(i) { if (i === S.actI || !S.acts[i]) return; S.acts[S.actI].anim = S.anim; S.anim = S.acts[i].anim || newAnim(S.acts[i].slot); S.acts[i].anim = null; S.actI = i; migrateAnim(); ANIM.f = 0; ANIM.tsel = null; ANIM.playing = false; trCache.key = ''; JUMP.dirty = true; JUMP.prevH = JUMP.lastH = null; jumpSync(); jumpFit(true); applyPose(poseAt(0)); needRebuild = true; save(); drawTL(); }
+function switchAct(i) { if (i === S.actI || !S.acts[i]) return; S.acts[S.actI].anim = S.anim; S.anim = S.acts[i].anim || newAnim(S.acts[i].slot); S.acts[i].anim = null; S.actI = i; migrateAnim(); ANIM.f = 0; ANIM.tsel = null; ANIM.playing = false; trCache.key = ''; JUMP.dirty = true; JUMP.prevH = JUMP.lastH = null; FLAP.prevR = FLAP.lastR = null; jumpSync(); jumpFit(true); applyPose(poseAt(0)); needRebuild = true; save(); drawTL(); }
 function addAct(slot, base) { pushUndo(); const names = S.acts.map(a => a.name); let name = base ? base.name : SLOTS[slot].name, n = 2; const root = name; while (names.includes(name)) name = root + String.fromCharCode(64 + n++);
   S.acts.push({ name, slot, anim: base ? clone(base.anim) : newAnim(slot) }); switchAct(S.acts.length - 1); toast('「' + name + '」を作った'); }
 document.getElementById('actSel').addEventListener('change', e => { const v = e.target.value; if (v.startsWith('a:')) switchAct(+v.slice(2)); else addAct(v.slice(2)); $('actSel').dataset.sig = ''; drawActSel(); });
@@ -528,8 +529,8 @@ function exitAnim() { if (ANIM.rec) ANIM.rec = null; ANIM.linkMode = false; bone
 function addKey(P) { const f = ANIM.f, { a } = segInfo(f); if (a && a.f !== f) { const s = segOf(a); s.fix = {}; } S.anim.keys.push({ f, pose: P }); S.anim.keys.sort((x, c) => x.f - c.f); }
 function commitPose() { if (inMirroredHalf()) { toast('後半は前半の反転で自動。前半をいじってな'); gotoFrame(ANIM.f); return; } syncTwins(); const P = snapshot(), k = keyAt(ANIM.f);
   if (k) k.pose = P; else if ((S.anim.guides || []).some(g => g.f === ANIM.f)) addKey(P); /* ガイドのコマ＝原画 */ else { const { a, b } = segInfo(ANIM.f); if (a && b) { const j = drawIdx(a, b, ANIM.f); if (j === 0) a.pose = P; else segOf(a).fix[j] = P; } else addKey(P); }
-  save(); if (isJumpAnim() && ANIM.f <= (jumpInfo() || {}).tk) { jumpSync(); applyPose(poseAt(ANIM.f)); needRebuild = true; jumpFit(false); } drawTL(); }
-function gotoFrame(f) { ANIM.f = Math.max(0, Math.min(S.anim.len, Math.round(f))); if (isJumpAnim()) jumpFit(false); const { a } = segInfo(ANIM.f); if (ANIM.tsel && (!a || ANIM.tsel.a !== a.f)) ANIM.tsel = null; applyPose(poseAt(ANIM.f)); needRebuild = true; drawTL(); }
+  save(); if (isFlapAnim()) { flapInfo(); jumpFit(false); } if (isJumpAnim() && ANIM.f <= (jumpInfo() || {}).tk) { jumpSync(); applyPose(poseAt(ANIM.f)); needRebuild = true; jumpFit(false); } drawTL(); }
+function gotoFrame(f) { ANIM.f = Math.max(0, Math.min(S.anim.len, Math.round(f))); if (isJumpAnim() || isFlapAnim()) jumpFit(false); const { a } = segInfo(ANIM.f); if (ANIM.tsel && (!a || ANIM.tsel.a !== a.f)) ANIM.tsel = null; applyPose(poseAt(ANIM.f)); needRebuild = true; drawTL(); }
 // ---- 回転ギズモ（関節を選ぶと、X・Y・Z の輪） ----
 function rotIdx(b) { const last = b.pts.length - 1; return selJ === last && selJ > 0 && !S.bones.some(c => c.parent === b.id && c.at === last) ? selJ - 1 : selJ; } /* 先っぽは一つ手前で回す */
 function rotPivot() { if ((mode !== 'pose' && !(mode === 'bone' && !S.tpl)) || sel == null || selJ == null) return null; const b = boneById(sel); if (!b || !b.pts[selJ]) return null; const G = jointGraph(), rs = rotSet(G, keyOfJoint(G, b, selJ)); return rs ? G.posVia(rs.pivot, rs.keys[0]) : null; }
@@ -1098,15 +1099,27 @@ function drawJumpArc() { const J = jumpInfo(); if (!J) return; const A = S.anim,
   let top = 0; pts.forEach((p, i) => { if (p.y < pts[top].y) top = i; }); const q = pts[top], t1 = '高さ ' + J.h.toFixed(2) + 'm' + (JUMP.prevH != null ? '（前 ' + JUMP.prevH.toFixed(2) + 'm）' : ''), t2 = J.limited ? '体の限界。もっと深く溜めると伸びる' : '';
   og.font = '900 15px sans-serif'; og.textAlign = 'center'; const w = Math.max(og.measureText(t1).width, t2 ? og.measureText(t2).width * 0.8 : 0) + 16, hh = t2 ? 40 : 24;
   og.fillStyle = 'rgba(255,255,255,.94)'; og.fillRect(q.x - w / 2, q.y - 18 - hh, w, hh); og.fillStyle = '#2f6fd0'; og.fillText(t1, q.x, q.y - 18 - hh + 18); if (t2) { og.font = '800 12px sans-serif'; og.fillStyle = '#c0392b'; og.fillText(t2, q.x, q.y - 18 - hh + 35); } og.restore(); }
+// ---- 羽ばたき：1回で体がどれだけ浮くか（羽の広さ×押した距離）。3回羽ばたいた時の上がり方を線で見せる ----
+var FLAP = { F: null, A: null, dirty: true, prevR: null, lastR: null };
+function isFlapAnim() { return mode === 'pose' && S.anim && S.acts && S.acts[S.actI] && S.acts[S.actI].slot === 'flap' && !S.anim.perf && window.JumpPhys; }
+function flapInfo() { if (!isFlapAnim()) return null; if (!JUMP.dirty && FLAP.F && FLAP.A === S.anim) return FLAP.F; const H = JumpPhys.com(S.rest || snapshot(), bodyIds())[1];
+  FLAP.F = JumpPhys.flapAnalyze(S.anim, f => poseAt(f), S.bones.map(b => b.id), H, bodyIds()); FLAP.A = S.anim; JUMP.dirty = false;
+  if (FLAP.F) { const T = window.BodyMotion.load(); FLAP.F.path = JumpPhys.flapPath(FLAP.F, T, 3, window.BodyMotion.sizeOf(S)); const r = FLAP.F.path.rise; if (FLAP.lastR != null && Math.abs(r - FLAP.lastR) > 0.002) FLAP.prevR = FLAP.lastR; FLAP.lastR = r; } return FLAP.F; }
+function flapPts() { const F = flapInfo(); if (!F) return null; const c = JumpPhys.com(S.rest || snapshot(), bodyIds()); return F.path.pts.map(([fw, up]) => V3([c[0], c[1] + up, c[2] + fw])); }
+function drawFlapPath() { const F = flapInfo(); if (!F) return; const P = flapPts().map(v => proj(v)), per = Math.round(Math.max(0.2, F.len / JumpPhys.FPS) * JumpPhys.FPS);
+  og.save(); og.strokeStyle = 'rgba(47,111,208,.75)'; og.lineWidth = 2; og.setLineDash([6, 5]); og.beginPath(); P.forEach((p, i) => i ? og.lineTo(p.x, p.y) : og.moveTo(p.x, p.y)); og.stroke(); og.setLineDash([]);
+  for (let k = 0; k < 3; k++) { const p = P[k * per]; if (!p) continue; og.fillStyle = '#2f6fd0'; og.beginPath(); og.arc(p.x, p.y, 6, 0, 7); og.fill(); og.fillStyle = '#fff'; og.font = '900 9px sans-serif'; og.textAlign = 'center'; og.fillText(k + 1, p.x, p.y + 3); } /* 羽ばたいた瞬間 */
+  let top = 0; P.forEach((p, i) => { if (p.y < P[top].y) top = i; }); const q = P[top], cm = v => Math.round(v * 100), t1 = '1回で +' + cm(F.path.rise) + 'cm' + (FLAP.prevR != null ? '（前 +' + cm(FLAP.prevR) + 'cm）' : ''), t2 = F.limited ? '羽の限界' : '';
+  og.font = '900 15px sans-serif'; const w = og.measureText(t1).width + 16, hh = t2 ? 40 : 24; og.fillStyle = 'rgba(255,255,255,.94)'; og.fillRect(q.x - w / 2, q.y - 18 - hh, w, hh); og.fillStyle = '#2f6fd0'; og.fillText(t1, q.x, q.y - 18 - hh + 18); if (t2) { og.font = '800 12px sans-serif'; og.fillStyle = '#c0392b'; og.fillText(t2, q.x, q.y - 18 - hh + 35); } og.restore(); }
 // 放物線が画面からはみ出したら、体と放物線が全部入るようにカメラを引く（自分で寄せた時は、はみ出した時だけ）
-function jumpFit(force) { const J = jumpInfo(); if (!J) return; const pts = []; for (let f = J.tk; f <= S.anim.len; f++) pts.push(V3(jumpArc(J, f))); for (const b of S.bones) for (const q of b.pts) pts.push(V3(q));
+function jumpFit(force) { const J = jumpInfo(), FP = J ? null : flapPts(); if (!J && !FP) return; const pts = FP ? FP.filter((_, i) => i % 3 === 0) : []; if (J) for (let f = J.tk; f <= S.anim.len; f++) pts.push(V3(jumpArc(J, f))); for (const b of S.bones) for (const q of b.pts) pts.push(V3(q));
   if (!force) { cam.updateMatrixWorld(); const out = pts.some(v => { const q = proj(v); return q.y < 120 || q.y > H - 150 || q.x < 20 || q.x > W - 20; }); if (!out) return; }
   const lo = pts.reduce((a, v) => a.min(v), pts[0].clone()), hi = pts.reduce((a, v) => a.max(v), pts[0].clone()), c = lo.clone().add(hi).multiplyScalar(0.5), r = hi.clone().sub(lo).length() / 2;
   orbit.tx = c.x; orbit.ty = c.y + r * 0.08; orbit.tz = c.z; orbit.dist = Math.max(1.2, r / Math.tan(cam.fov * Math.PI / 360) * 1.7); }
 // 放物線のコマの点をタップ＝そのコマへ
 function arcHit(x, y) { const J = jumpInfo(); if (!J) return null; let best = null, bd = 16; for (let f = J.tk + 1; f <= S.anim.len; f++) { const p = proj(V3(jumpArc(J, f))), d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = f; } } return best; }
 function draw() {
-  og.clearRect(0, 0, W, H); if (mode === 'pose') drawJumpArc();
+  og.clearRect(0, 0, W, H); if (mode === 'pose') { drawJumpArc(); drawFlapPath(); }
   if (mode === 'paint') { document.getElementById('panel').style.display = 'none'; document.body.classList.remove('panelOn'); return; }
   if ((S.sym || axisMode) && mode !== 'pose') { const a = AX(), seg = (p, q) => { const A = proj(new THREE.Vector3(...p)), B = proj(new THREE.Vector3(...q)); og.beginPath(); og.moveTo(A.x, A.y); og.lineTo(B.x, B.y); og.stroke(); };
     og.setLineDash([6, 6]); og.strokeStyle = axisMode ? 'rgba(138,79,208,.9)' : 'rgba(138,79,208,.35)'; og.lineWidth = axisMode ? 2 : 1.2; seg([a, 0, 0], [a, 2, 0]); seg([a, 0, -1], [a, 0, 1]); og.setLineDash([]); }

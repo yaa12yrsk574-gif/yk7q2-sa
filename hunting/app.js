@@ -282,11 +282,14 @@ function animsFor(d) { const kind = TPL.detect(d), rest = d.rest || Object.fromE
   for (const slot of SLOTS_ALL) { let A = animOf(d, slot); if (!A && kind) { try { A = TPL.animFor(kind, slot, rest, d.bones); } catch (_) { A = null; } } if (A && A.keys && A.keys.length) out[slot] = A; }
   return out; }
 // 体を動きの f コマ目にする（同じコマは覚えておく）
-function bodyFrame(body, A, f) { const fi = Math.floor(f); if (!body.fc || body.fcA !== A) { body.fc = new Map(); body.fcA = A; } let P = body.fc.get(fi); if (!P) { S = body.D; S.anim = A; P = shiftPose(poseAt(Math.min(fi, A.len)), body.D.__o); const J = body.jx; if (J && J.A === A && fi > J.tk) P = JumpPhys.placeAt(P, J.ids, J.comTk); body.fc.set(fi, P); } body.setPose(body.hook ? body.hook(P) : P); } /* hook＝芝居のポーズを重ねる（相棒の尾ブンブン等） */
+function bodyFrame(body, A, f) { const fi = Math.floor(f); if (!body.fc || body.fcA !== A) { body.fc = new Map(); body.fcA = A; } let P = body.fc.get(fi); if (!P) { S = body.D; S.anim = A; P = shiftPose(poseAt(Math.min(fi, A.len)), body.D.__o); const J = body.jx; if (J && J.A === A && fi > J.tk) P = JumpPhys.placeAt(P, J.ids, J.comTk); const Fx = body.fx; if (Fx && Fx.A === A) P = JumpPhys.placeAt(P, Fx.ids, Fx.c0); body.fc.set(fi, P); } body.setPose(body.hook ? body.hook(P) : P); } /* hook＝芝居のポーズを重ねる（相棒の尾ブンブン等） */
 // ジャンプ：一番しゃがんだコマ＝溜め、一番速く伸びるコマ＝踏み切り。羽ばたき：先っぽが一番速く下がるコマ＝打ち下ろし
 // ジャンプ：踏み切りまでのアニメから、跳ぶ速さと向きを計算（工房と同じ shared/jump.js）。空中のコマはポーズだけ
-function jumpOf(body, A) { if (!A || !A.len || !window.JumpPhys) return null; const D = body.D, ids = D.bones.map(b => b.id), rest = D.rest || Object.fromEntries(D.bones.map(b => [b.id, b.pts])), H = JumpPhys.com(rest, ids)[1];
+function jumpOf(body, A) { if (!A || !A.len || !window.JumpPhys) return null; const D = body.D, ids = [(D.bones.find(b => b.parent == null) || D.bones[0]).id], /* 重心＝胴（根っこの骨）。手足や羽の振りに引っぱられへんように */ rest = D.rest || Object.fromEntries(D.bones.map(b => [b.id, b.pts])), H = JumpPhys.com(rest, ids)[1];
   const J = JumpPhys.analyze(A, f => { S = D; S.anim = A; return shiftPose(poseAt(f), D.__o); }, ids, H, window.BodyMotion.load()); if (J) { J.ids = ids; J.A = A; } return J; }
+// 羽ばたき：1回の振り下ろしで浮く量（羽の広さ×押した距離）。空中の体の上下はアニメやなく物理なので、羽ばたきのポーズは重心を固定して見せる
+function flapOf(body, A) { if (!A || !A.len || !window.JumpPhys) return null; const D = body.D, ids = [(D.bones.find(b => b.parent == null) || D.bones[0]).id], /* 重心＝胴（根っこの骨）。手足や羽の振りに引っぱられへんように */ rest = D.rest || Object.fromEntries(D.bones.map(b => [b.id, b.pts])), H = JumpPhys.com(rest, ids)[1], pz = f => { S = D; S.anim = A; return shiftPose(poseAt(f), D.__o); };
+  const Fx = JumpPhys.flapAnalyze(A, pz, D.bones.map(b => b.id), H, ids); if (Fx) { Fx.ids = ids; Fx.A = A; Fx.c0 = JumpPhys.com(pz(0), ids); } return Fx; }
 function readMarks(body, A, kind) { if (!A || !A.len) return null; S = body.D; S.anim = A; const F = []; for (let f = 0; f <= A.len; f++) F.push(poseAt(f));
   const root = body.D.bones.find(b => b.parent == null) || body.D.bones[0], ry = F.map(P => { const p = P[root.id]; return p ? p.reduce((s, q) => s + q[1], 0) / p.length : 0; });
   let tk = 1, up = -1e9; for (let f = 0; f < A.len; f++) { const v = ry[f + 1] - ry[f]; if (v > up) { up = v; tk = f + 1; } }
@@ -371,8 +374,9 @@ function setMate(w, ride) { if (ride == null) ride = riding;
   const kind = TPL.detect(d);
   mate = { work: w, kind, body: new BoneBody(d, 0xd9b48a), x: pl.x, z: pl.z, y: groundAt(pl.x, pl.z, pl.y), vy: 0, yaw: pl.yaw, v: 0, st: 'ground', f: 0, ph: 0, airT: 0, seatY: 0.5, A: animsFor(d) };
   const refA = kind ? animsFor(TPL.data(kind)) : {}, refB = kind ? new BoneBody(TPL.data(kind), 0xffffff) : null;
-  mate.jm = readMarks(mate.body, mate.A.jump, kind); mate.fm = readMarks(mate.body, mate.A.flap, kind); mate.jx = jumpOf(mate.body, mate.A.jump); if (mate.jx && mate.jm) { mate.jm.hold = mate.jx.hold; mate.jm.takeoff = mate.jx.tk; mate.body.jx = mate.jx; } /* 溜め・踏み切りのコマは物理と同じ */
+  mate.jm = readMarks(mate.body, mate.A.jump, kind); mate.fm = readMarks(mate.body, mate.A.flap, kind); mate.jx = jumpOf(mate.body, mate.A.jump); mate.fx = flapOf(mate.body, mate.A.flap); mate.body.fx = mate.fx; if (mate.jx && mate.jm) { mate.jm.hold = mate.jx.hold; mate.jm.takeoff = mate.jx.tk; mate.body.jx = mate.jx; } /* 溜め・踏み切りのコマは物理と同じ */
   if (refB) { const rj = readMarks(refB, refA.jump, kind), rf = readMarks(refB, refA.flap, kind); mate.jumpK = rj && mate.jm && rj.upV > 0 ? Math.max(0.75, Math.min(1.3, mate.jm.upV / rj.upV)) : 1; mate.flapK = rf && mate.fm && rf.downV > 0 ? Math.max(0.6, Math.min(1.4, mate.fm.downV / rf.downV)) : 1; refB.dispose(); } else { mate.jumpK = 1; mate.flapK = 1; }
+  if (mate.fx) mate.flapK = mate.fx.r; /* 羽ばたきの強さ＝羽の広さ×押した距離（お手本＝1.0、上限1.8） */
   mate.canFly = !!(mate.A.flap && mate.A.glide); mate.wp = mate.A.flap ? wingProf(mate.body, mate.A.flap) : null; mate.wf = 0; mate.sv = 0; mate.bank = 0;
   mate.baseSize = window.BodyMotion.sizeOf(d); applyMateSize();
   document.getElementById('mateBtn').textContent = '相棒：' + w.name;
@@ -411,7 +415,7 @@ const closePick = () => document.getElementById('pickDlg').classList.remove('sho
 document.getElementById('mateBtn').onclick = () => { renderPick(); document.getElementById('pickDlg').classList.add('show'); };
 document.getElementById('pickClose').onclick = closePick;
 function updBP() { let n = 0; try { n = +localStorage.getItem(BP_KEY) || 0; } catch (_) {} document.getElementById('bp').textContent = '設計図 ' + n; } updBP();
-window.__fieldDebug = () => ({ dream: () => DREAM.state(), DREAM, pl, get mate() { return mate; },  boulder, rival, wilds, setMate, applyMateSize, makeBlueprint, groundAt, setTestSize: v => { testSize = v; applyMateSize(); }, press: () => spaceDown(), release: () => spaceUp(), ride: () => toggleRide(), riding: () => riding, LEDGE, SPOT, FRUITS, cam: () => ({ x: cam.position.x, y: cam.position.y, z: cam.position.z }) }); /* 検証用 */
+window.__fieldDebug = () => ({ dream: () => DREAM.state(), DREAM, pl, get mate() { return mate; },  boulder, rival, wilds, setMate, applyMateSize, makeBlueprint, groundAt, setTestSize: v => { testSize = v; applyMateSize(); }, press: () => spaceDown(), release: () => spaceUp(), ride: () => toggleRide(), riding: () => riding, flapOf, jumpOf, BoneBody, animsFor, TPL, LEDGE, SPOT, FRUITS, cam: () => ({ x: cam.position.x, y: cam.position.y, z: cam.position.z }) }); /* 検証用 */
 window.__field = { refresh() { if (mate) { const w = loadWorks().find(x => x.id === mate.work.id); if (w) { const keep = { x: mate.x, z: mate.z, y: mate.y, yaw: mate.yaw }; setMate(w); Object.assign(mate, keep); } } updBP(); } };
 // ============ ⚙ 大きさと動きの調整（数値はこの端末に保存） ============
 const TUNE_ROWS = [['camH', 'カメラの高さ', 0.5, 2, 0.05], ['camD', 'カメラの距離', 0.5, 2, 0.05], ['jumpV', 'ジャンプの強さ', 3, 10, 0.1], ['gravity', '重力', 6, 30, 0.5], ['flapV', '羽ばたきの強さ', 1, 10, 0.1], ['glideSink', '滑空で落ちる速さ', 0.2, 4, 0.1], ['glideSpeed', '滑空の速さ', 2, 10, 0.1], ['swimSpeed', '泳ぐ速さ', 0.5, 5, 0.1], ['padStroke', '羽ばたき1回の指の幅', 60, 320, 5], ['airTurn', '空中の旋回', 0.5, 4, 0.1], ['airMax', '飛行の最高速', 3, 25, 0.5], ['airAccel', '飛行の直線加速', 0.5, 8, 0.1], ['airCam', '飛行カメラの追いつき', 0.3, 4, 0.1], ['accel', '加速', 2, 20, 0.5], ['turn', '小回り', 2, 15, 0.5], ['agiExp', '大きさで鈍る効き', 0, 1.5, 0.05], ['weightExp', '大きい＝重さの壁', 0, 1.5, 0.05]];
