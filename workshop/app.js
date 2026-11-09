@@ -830,7 +830,7 @@ const keyOfJoint = (G, b, i) => G.find(nk(b.id, i)); const b0id = d => d.b && d.
 function footPins(skipKey) { if (mode !== 'pose' || ANIM.rec) return []; const G = jointGraph(), cand = [];
   for (const k of G.N.keys()) { if (k === G.root || G.deg(k) !== 1 || k === skipKey) continue; const ch = ikChain(G, k, false); if (ch.length < 3) continue;
     const P = ch.map((q, i) => i === 0 ? G.posVia(q, ch[1]) : G.pos(q)); let L = 0; for (let i = 1; i < P.length; i++) L += P[i].distanceTo(P[i - 1]);
-    const tip = P[P.length - 1]; if (P[0].y - tip.y < L * 0.15) continue; cand.push({ key: k, T: tip.clone(), ref: bendRef(P), L }); } /* 下向きに伸びてる＝脚（しっぽや首は外す） */
+    const tip = P[P.length - 1]; if (P[0].y - tip.y < L * 0.15) continue; cand.push({ key: k, T: tip.clone(), ref: bendRef(P), L, hip: P[0].clone() }); } /* 下向きに伸びてる＝脚（しっぽや首は外す） */
   if (!cand.length) return []; const low = Math.min(...cand.map(c => c.T.y));
   return cand.filter(c => c.T.y <= low + Math.max(0.025, c.L * 0.08) && c.T.y < c.L * 0.35); } /* 一番低い足と同じくらい低い＝地面に付いてる */
 function holdFeet(pins, skip) { if (!pins || !pins.length) return; const G = jointGraph();
@@ -848,7 +848,7 @@ function plantAfter(lastNode, pins) { if (!pins || !pins.length) return; const G
   if (pin) { const D = pin.T.clone().sub(G.pos(lk)), R = S.bones.find(b => b.parent == null); if (R && D.lengthSq() > 1e-10) { const seen = new Set(); for (const b of S.bones) if (b.parent == null) moveBone(b, D, seen); } }
   holdFeet(pins, pin ? new Set([pin.key]) : null); }
 function drawRoot() { if (mode === 'shape' || mode === 'paint' || !S.bones.length) return; const G = jointGraph(), P = G.root && G.pos(G.root); if (!P) return; const s0 = proj(P);
-  og.strokeStyle = '#2f6fd0'; og.lineWidth = 2.5; og.setLineDash([3, 3]); og.beginPath(); og.arc(s0.x, s0.y, 13, 0, 7); og.stroke(); og.setLineDash([]); og.fillStyle = '#2f6fd0'; og.font = '900 11px sans-serif'; og.textAlign = 'center'; og.fillText('腰', s0.x, s0.y - 17); }
+  og.strokeStyle = '#2f6fd0'; og.lineWidth = 2.5; og.setLineDash([3, 3]); og.beginPath(); og.arc(s0.x, s0.y, 13, 0, 7); og.stroke(); og.setLineDash([]); og.fillStyle = '#2f6fd0'; og.font = '900 11px sans-serif'; og.textAlign = 'center'; og.fillText(mode === 'pose' ? '腰（つかんで動かす）' : '腰', s0.x, s0.y - 17); if (mode === 'pose') { og.fillStyle = 'rgba(47,111,208,.18)'; og.beginPath(); og.arc(s0.x, s0.y, 13, 0, 7); og.fill(); } }
 function setRootHere() { const b = boneById(sel); if (!b || selJ == null || !b.pts[selJ]) { toast('右クリックで関節を選んでから押してな'); return; } pushUndo(); const G = jointGraph(), n = G.N.get(keyOfJoint(G, b, selJ)); S.root = { id: n.main.b.id, i: n.main.i }; save(); needDraw = true; updBtns(); toast('ここを腰（根っこ）にした。親子はここから数え直し'); }
 // ---- 骨モード：関節から生やす（左ドラッグ） ----
 function addBoneToPoses(b) { const p = b.parent != null && boneById(b.parent); for (const P of poseStores()) { if (P[b.id] && P[b.id].length === b.pts.length) continue; if (!p || !P[p.id] || P[p.id].length !== p.pts.length) continue;
@@ -883,6 +883,14 @@ function startIK(e, jh, far) { const G = jointGraph(), key = keyOfJoint(G, jh.b,
     st.drag = { kind: 'ik', id: e.pointerId, G, ch, ref, P0: G.pos(key), N: planeN(), live, cids: centerIds() }; }
   const lk = linkedIn(st.drag.live); if (lk) { st.drag = null; toast('この骨は「' + lk + '」の動きにつながってる。元の骨を動かしてな'); return true; }
   if (!ANIM.rec) pushUndo(); sel = jh.b.id; SELB = []; selJ = jh.i; selMir = false; return true; }
+function bodyHit(x, y, pen) { if (mode !== 'pose' || ANIM.traj || ANIM.rec) return false; const G = jointGraph(), P = G.root && G.pos(G.root); if (!P) return false; const q = proj(P); return Math.hypot(q.x - x, q.y - y) < (pen ? 18 : 28); }
+function startBody(e) { pushUndo(); st.drag = { kind: 'body', id: e.pointerId, orig: S.bones.map(b => b.pts.map(q => q.slice())), pins: footPins(), P0: (() => { const G = jointGraph(); return G.pos(G.root); })(), N: planeN() }; }
+function moveBody(x, y) { const d = st.drag, T = unprojectOnPlane(x, y, d.P0, d.N); if (!T) return; let D = T.clone().sub(d.P0);
+  const ok = v => v.y + d.P0.y > 0.04 && d.pins.every(p => { const h = p.hip.clone().add(v).distanceTo(p.T); return h <= p.L * 0.985 && h >= p.L * 0.3; }); /* 脚が届く範囲・たためる範囲・地面より上 */
+  if (!ok(D)) { let lo = 0, hi = 1; for (let i = 0; i < 18; i++) { const m = (lo + hi) / 2; if (ok(D.clone().multiplyScalar(m))) lo = m; else hi = m; } D.multiplyScalar(lo); }
+  const legs = new Set(); { const G = jointGraph(); for (const p of d.pins) for (const r of G.bonesOf(ikChain(G, p.key, false).slice(1))) legs.add(r); }
+  S.bones.forEach((b, i) => { b.pts = d.orig[i].map(q => { const v = [q[0] + D.x, q[1] + D.y, q[2] + D.z]; if (!legs.has(b.id) && v[1] < 0.015) v[1] = 0.015; return v.map(r4); }); }); /* 体ごと平行移動（しっぽ等は地面にめり込まん） → 地面の足だけ元の場所に戻す */
+  holdFeet(d.pins); needRebuild = true; }
 function moveIK(x, y) { const d = st.drag; if (x != null) { d.lx = x; d.ly = y; } x = d.lx; y = d.ly; if (x == null) return; if (!d.pins) d.pins = footPins(d.ch ? d.ch[d.ch.length - 1] : null); const T = unprojectOnPlane(x, y, d.G.pos(d.ch ? d.ch[d.ch.length - 1] : d.key), d.N); if (!T) return; const G = d.G;
   if (d.kind === 'rope') { const keys = [d.key, ...G.sub(d.key)], old = new Map(keys.map(k => [k, G.pos(k)])), nw = new Map([[d.key, T]]); /* 頭が先導して、体は後からついてくる */
     for (const k of keys.slice(1)) { const pk = G.up.get(k), sh = G.posVia(pk, k).sub(old.get(pk)), pp = nw.get(pk).clone().add(sh), L = old.get(k).distanceTo(old.get(pk).clone().add(sh)), dir = old.get(k).clone().sub(pp); nw.set(k, pp.clone().addScaledVector(dir.lengthSq() > 1e-12 ? dir.normalize() : new THREE.Vector3(0, -1, 0), L)); }
@@ -913,7 +921,7 @@ over.addEventListener('pointerdown', e => {
   if(mode==='paint'){st.stroke={id:e.pointerId,pts:[{x,y}],paintCut:true};return;}
   if (mode === 'pose' && ANIM.traj) { ANIM.playing = false; trajDown(e, x, y); return; }
   if (mode === 'pose' && !ANIM.traj && inMirroredHalf()) { toast('後半は前半の反転で自動。前半をいじってな'); return; }
-  if (mode === 'pose' && !ANIM.traj) { if (!ANIM.rec) ANIM.playing = false; { const af = arcHit(x, y); if (af != null && af !== ANIM.f && !jointHit(x, y, pen ? 14 : 22)) { gotoFrame(af); return; } } const rh = rotHit(x, y, !pen); if (rh && !rh.center) { startRot(e, rh); if (st.drag) st.drag.cids = centerIds(); return; }
+  if (mode === 'pose' && !ANIM.traj) { if (!ANIM.rec) ANIM.playing = false; { const af = arcHit(x, y); if (af != null && af !== ANIM.f && !jointHit(x, y, pen ? 14 : 22)) { gotoFrame(af); return; } } if (bodyHit(x, y, pen)) { startBody(e); return; } const rh = rotHit(x, y, !pen); if (rh && !rh.center) { startRot(e, rh); if (st.drag) st.drag.cids = centerIds(); return; }
     if (ANIM.linkMode && e.button === 0) { st.stroke = { id: e.pointerId, pts: [{ x, y }], link: true }; return; } /* つなぐ中：なぞった順に等間隔ずらし */
     const jt = jointHit(x, y, pen ? 14 : 22); if (jt) { const G = jointGraph(), k = keyOfJoint(G, jt.b, jt.i); if (G.deg(k) === 1 && startIK(e, jt, e.shiftKey)) return; } /* 先っぽをつかむ＝引っぱる（Shiftで腰まで） */
     if (rh) { if (!(selJ > 0)) return; startRot(e, rh); st.drag.cids = centerIds(); return; } }
@@ -951,6 +959,7 @@ over.addEventListener('pointermove', e => {
   if (d.kind === 'ttick') { trajMoveTick(d, x, y); return; }
   if (d.kind === 'tcurve') return;
   if (d.kind === 'rot') { moveRot(e); keepCenter(d.cids); return; }
+  if (d.kind === 'body') { moveBody(x, y); return; }
   if (d.kind === 'ik' || d.kind === 'rope') { moveIK(x, y); return; }
   if (d.kind === 'poseJ') { if (Math.hypot(x - d.x, y - d.y) < 6) return; st.stroke = { id: d.id, pts: [{ x: d.x, y: d.y }, { x, y }] }; st.drag = null; needDraw = true; return; } /* 関節から描く＝線に沿わせる */
   if (d.kind === 'pose') { if (!d.pins) { const G0 = jointGraph(); d.pins = footPins().filter(p => !ikChain(G0, p.key, false).slice(1).some(k => G0.N.get(k).refs.some(r => r.b.id === b0id(d)))); } const b = d.b, piv = ptsOf(b, d.mir)[d.i - 1], cur = ptsOf(b, d.mir)[d.i], tgt = unprojectOnPlane(x, y, cur, planeN()); if (!tgt) return;
@@ -983,7 +992,7 @@ const up = e => {
     if (d.kind === 'tcurve') trajTap(d);
     if (lastPT !== 'mouse' && d.kind === 'jsel' && !d.moving) { selJ = selJ === d.i ? null : d.i; }
     if (lastPT !== 'mouse' && d.kind === 'poseJ') { setSel([d.b.id, ...descIds(d.b.id)]); sel = d.b.id; if (selJ === d.i && selMir === !!d.mir) selJ = null; else { selJ = d.i; selMir = !!d.mir; } }
-    if ((d.kind === 'pose' || d.kind === 'ik' || d.kind === 'rope' || (d.kind === 'rot' && d.pushed)) && mode === 'pose' && !ANIM.rec) commitPose();
+    if ((d.kind === 'pose' || d.kind === 'ik' || d.kind === 'rope' || d.kind === 'body' || (d.kind === 'rot' && d.pushed)) && mode === 'pose' && !ANIM.rec) commitPose();
     needRebuild = true; needDraw = true; }
 };
 over.addEventListener('pointerup', up); over.addEventListener('pointercancel', up);
