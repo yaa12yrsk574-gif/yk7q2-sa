@@ -282,8 +282,11 @@ function animsFor(d) { const kind = TPL.detect(d), rest = d.rest || Object.fromE
   for (const slot of SLOTS_ALL) { let A = animOf(d, slot); if (!A && kind) { try { A = TPL.animFor(kind, slot, rest, d.bones); } catch (_) { A = null; } } if (A && A.keys && A.keys.length) out[slot] = A; }
   return out; }
 // 体を動きの f コマ目にする（同じコマは覚えておく）
-function bodyFrame(body, A, f) { const fi = Math.floor(f); if (!body.fc || body.fcA !== A) { body.fc = new Map(); body.fcA = A; } let P = body.fc.get(fi); if (!P) { S = body.D; S.anim = A; P = shiftPose(poseAt(Math.min(fi, A.len)), body.D.__o); body.fc.set(fi, P); } body.setPose(body.hook ? body.hook(P) : P); } /* hook＝芝居のポーズを重ねる（相棒の尾ブンブン等） */
+function bodyFrame(body, A, f) { const fi = Math.floor(f); if (!body.fc || body.fcA !== A) { body.fc = new Map(); body.fcA = A; } let P = body.fc.get(fi); if (!P) { S = body.D; S.anim = A; P = shiftPose(poseAt(Math.min(fi, A.len)), body.D.__o); const J = body.jx; if (J && J.A === A && fi > J.tk) P = JumpPhys.placeAt(P, J.ids, J.comTk); body.fc.set(fi, P); } body.setPose(body.hook ? body.hook(P) : P); } /* hook＝芝居のポーズを重ねる（相棒の尾ブンブン等） */
 // ジャンプ：一番しゃがんだコマ＝溜め、一番速く伸びるコマ＝踏み切り。羽ばたき：先っぽが一番速く下がるコマ＝打ち下ろし
+// ジャンプ：踏み切りまでのアニメから、跳ぶ速さと向きを計算（工房と同じ shared/jump.js）。空中のコマはポーズだけ
+function jumpOf(body, A) { if (!A || !A.len || !window.JumpPhys) return null; const D = body.D, ids = D.bones.map(b => b.id), rest = D.rest || Object.fromEntries(D.bones.map(b => [b.id, b.pts])), H = JumpPhys.com(rest, ids)[1];
+  const J = JumpPhys.analyze(A, f => { S = D; S.anim = A; return shiftPose(poseAt(f), D.__o); }, ids, H, window.BodyMotion.load()); if (J) { J.ids = ids; J.A = A; } return J; }
 function readMarks(body, A, kind) { if (!A || !A.len) return null; S = body.D; S.anim = A; const F = []; for (let f = 0; f <= A.len; f++) F.push(poseAt(f));
   const root = body.D.bones.find(b => b.parent == null) || body.D.bones[0], ry = F.map(P => { const p = P[root.id]; return p ? p.reduce((s, q) => s + q[1], 0) / p.length : 0; });
   let tk = 1, up = -1e9; for (let f = 0; f < A.len; f++) { const v = ry[f + 1] - ry[f]; if (v > up) { up = v; tk = f + 1; } }
@@ -368,7 +371,7 @@ function setMate(w, ride) { if (ride == null) ride = riding;
   const kind = TPL.detect(d);
   mate = { work: w, kind, body: new BoneBody(d, 0xd9b48a), x: pl.x, z: pl.z, y: groundAt(pl.x, pl.z, pl.y), vy: 0, yaw: pl.yaw, v: 0, st: 'ground', f: 0, ph: 0, airT: 0, seatY: 0.5, A: animsFor(d) };
   const refA = kind ? animsFor(TPL.data(kind)) : {}, refB = kind ? new BoneBody(TPL.data(kind), 0xffffff) : null;
-  mate.jm = readMarks(mate.body, mate.A.jump, kind); mate.fm = readMarks(mate.body, mate.A.flap, kind);
+  mate.jm = readMarks(mate.body, mate.A.jump, kind); mate.fm = readMarks(mate.body, mate.A.flap, kind); mate.jx = jumpOf(mate.body, mate.A.jump); if (mate.jx && mate.jm) { mate.jm.hold = mate.jx.hold; mate.jm.takeoff = mate.jx.tk; mate.body.jx = mate.jx; } /* 溜め・踏み切りのコマは物理と同じ */
   if (refB) { const rj = readMarks(refB, refA.jump, kind), rf = readMarks(refB, refA.flap, kind); mate.jumpK = rj && mate.jm && rj.upV > 0 ? Math.max(0.75, Math.min(1.3, mate.jm.upV / rj.upV)) : 1; mate.flapK = rf && mate.fm && rf.downV > 0 ? Math.max(0.6, Math.min(1.4, mate.fm.downV / rf.downV)) : 1; refB.dispose(); } else { mate.jumpK = 1; mate.flapK = 1; }
   mate.canFly = !!(mate.A.flap && mate.A.glide); mate.wp = mate.A.flap ? wingProf(mate.body, mate.A.flap) : null; mate.wf = 0; mate.sv = 0; mate.bank = 0;
   mate.baseSize = window.BodyMotion.sizeOf(d); applyMateSize();
@@ -497,8 +500,10 @@ function stepMate(dt, mx, mz, ml, moving, walking, rx, rz, ai) { const m = mate,
   // ---- 状態の切りかえ ----
   if ((m.st === 'ground' || m.st === 'swim' || m.st === 'land') && pressed) { if (A.jump && m.jm) { m.st = 'charge'; m.f = 0; m.lifted = false; } else { m.vy = T.jumpV; m.y += 0.02; m.st = 'air'; m.lifted = true; } }
   else if (m.st === 'charge' && !m.padJ) { m.f = Math.min(m.jm.hold, m.f + dt * FR); if (released || !held) { m.st = 'takeoff'; m.f = Math.max(m.f, m.jm.hold); m.jpow = 1; } }
-  else if (m.st === 'takeoff') { const prev = playOnce(dt, A.jump); if (!m.lifted && prev < m.jm.takeoff && m.f >= m.jm.takeoff) { m.vy = T.jumpV * m.jumpK * (m.jpow || 1); m.y += 0.02; m.lifted = true; }
-    if (m.f >= A.jump.len) { if (!m.lifted) { m.vy = T.jumpV * m.jumpK * (m.jpow || 1); m.y += 0.02; m.lifted = true; } m.st = 'air'; m.airT = 0; }
+  else if (m.st === 'takeoff') { const lift = () => { const J = m.jx, k = m.jpow || 1; m.vy = (J ? J.vy : T.jumpV * m.jumpK) * k; if (J && J.vh[1] > 0.3) m.v = Math.max(m.v, J.vh[1] * k); m.y += 0.02; m.lifted = true; m.airT = 0; };
+    if (m.lifted && m.jx) { m.airT += dt; m.f = m.jx.tk + Math.min(1, m.airT / Math.max(0.05, m.jx.tair * (m.jpow || 1))) * (A.jump.len - m.jx.tk); if (m.airT >= m.jx.tair * (m.jpow || 1)) { m.st = 'air'; m.airT = 0; } } /* 空中のポーズは滞空時間に合わせて流す */
+    else { const prev = playOnce(dt, A.jump); if (!m.lifted && prev < m.jm.takeoff && m.f >= m.jm.takeoff) lift();
+      if (m.f >= A.jump.len) { if (!m.lifted) lift(); m.st = 'air'; m.airT = 0; } }
     if (m.lifted && pressed && m.canFly) { m.st = 'flap'; m.f = 0; m.flapped = false; } }
   else if (m.st === 'air') { m.airT += dt; if (m.canFly && pressed) { m.st = 'flap'; m.f = 0; m.flapped = false; } else if (m.canFly && held && m.vy < 0.6) m.st = 'glide'; }
   else if (m.st === 'flap') { const prev = playOnce(dt, A.flap); if (!m.flapped && prev < m.fm.down && m.f >= m.fm.down) { m.vy = Math.max(m.vy, 0) * 0.35 + T.flapV * m.flapK * BIRD.flap(m); m.flapped = true; }
