@@ -60,3 +60,10 @@
   #tlMore { display:none; flex-direction:column; gap:4px; } #tl.more #tlMore { display:flex; } #tl.more #tlMoreBtn { box-shadow:inset 0 0 0 2px #8a4fd0; }
   #tlMain .btn { padding:8px 12px; font-size:14px; } #tlMain #actSel { max-width:200px; } #tlMoreBtn { font-weight:900; min-width:44px; }
   body.anim:not(.tlmore) #hint { bottom:calc(120px + env(safe-area-inset-bottom)); }
+
+/* 保存してへん印・試し場 */
+.btn.unsaved { background:#d9572b; color:#fff; border-color:#d9572b; }
+body:not(.anim) #tryBtn { display:none !important; }
+#tryBtn.on { background:#1d86b0; border-color:#1d86b0; color:#fff; }
+body.trying #tlMore, body.trying #tlc, body.trying #hint { display:none !important; }
+#tl .btn:disabled { opacity:.4; }

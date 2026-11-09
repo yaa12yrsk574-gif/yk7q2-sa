@@ -14,7 +14,7 @@ function migrate() { nextId = 1; for (const b of S.bones) { nextId = Math.max(ne
 const clone = o => JSON.parse(JSON.stringify(o)), undoS = [], redoS = [];
 migrate(); if (S.rest) { for (const b of S.bones) if (S.rest[b.id]) b.pts = clone(S.rest[b.id]); delete S.rest; }
 function pushUndo() { undoS.push(clone(S)); if (undoS.length > 80) undoS.shift(); redoS.length = 0; updBtns(); }
-let saveT = 0; function save() { if (JUMP) JUMP.dirty = true; try { if (mode === 'pose' && S.anim && S.anim.mirrorHalf) { regenHalf(); if (inMirroredHalf()) { applyPose(poseAt(ANIM.f)); needRebuild = true; } } } catch (_) {} clearTimeout(saveT); saveT = setTimeout(() => { try { window.BoneStorage.saveDraft(S); } catch (_) {} }, 300); }
+let saveT = 0; function save() { if (JUMP) JUMP.dirty = true; try { if (mode === 'pose' && S.anim && S.anim.mirrorHalf) { regenHalf(); if (inMirroredHalf()) { applyPose(poseAt(ANIM.f)); needRebuild = true; } } } catch (_) {} clearTimeout(saveT); saveT = setTimeout(() => { try { window.BoneStorage.saveDraft(S); } catch (_) {} try { checkUnsaved(); } catch (_) {} }, 300); }
 const V3 = a => new THREE.Vector3(a[0], a[1], a[2]), r4 = v => Math.round(v * 1e4) / 1e4;
 // ---- 3D ----
 const canvas = document.getElementById('view'), over = document.getElementById('over'), og = over.getContext('2d');
@@ -517,15 +517,16 @@ function drawActSel() { const el = $('actSel'); if (!S.acts) return; const sig =
   const tk = TPL.detect(S), tsl = tk ? TPL.slots(tk).map(x => x.slot) : [], have = new Set(S.acts.map(a => a.slot)), add = (k, lb, g) => { const o = document.createElement('option'); o.value = 't:' + k; o.textContent = lb; g.appendChild(o); };
   const miss = tsl.filter(k => !have.has(k) && SLOTS[k]); if (miss.length) { const g = document.createElement('optgroup'); g.label = 'この子に足す（お手本つき）'; for (const k of miss) add(k, '＋' + SLOTS[k].name, g); el.appendChild(g); } /* まだ作ってない動き（ジャンプ等）を上に */
   const g2 = document.createElement('optgroup'); g2.label = 'ほかの動き'; for (const k in SLOTS) if (!miss.includes(k)) add(k, '＋' + SLOTS[k].name + (tsl.includes(k) ? '（お手本つき）' : ''), g2); el.appendChild(g2); el.value = 'a:' + S.actI; }
-function switchAct(i) { if (i === S.actI || !S.acts[i]) return; S.acts[S.actI].anim = S.anim; S.anim = S.acts[i].anim || newAnim(S.acts[i].slot); S.acts[i].anim = null; S.actI = i; migrateAnim(); ANIM.f = 0; ANIM.tsel = null; ANIM.playing = false; trCache.key = ''; JUMP.dirty = true; JUMP.prevH = JUMP.lastH = null; FLAP.prevR = FLAP.lastR = null; jumpSync(); jumpFit(true); applyPose(poseAt(0)); needRebuild = true; save(); drawTL(); }
+function switchAct(i) { if (TRY) tryStop(); if (i === S.actI || !S.acts[i]) return; S.acts[S.actI].anim = S.anim; S.anim = S.acts[i].anim || newAnim(S.acts[i].slot); S.acts[i].anim = null; S.actI = i; migrateAnim(); ANIM.f = 0; ANIM.tsel = null; ANIM.playing = false; trCache.key = ''; JUMP.dirty = true; JUMP.prevH = JUMP.lastH = null; FLAP.prevR = FLAP.lastR = null; jumpSync(); jumpFit(true); applyPose(poseAt(0)); needRebuild = true; save(); drawTL(); }
 function addAct(slot, base) { pushUndo(); const names = S.acts.map(a => a.name); let name = base ? base.name : SLOTS[slot].name, n = 2; const root = name; while (names.includes(name)) name = root + String.fromCharCode(64 + n++);
   S.acts.push({ name, slot, anim: base ? clone(base.anim) : newAnim(slot) }); switchAct(S.acts.length - 1); toast('「' + name + '」を作った'); }
 document.getElementById('actSel').addEventListener('change', e => { const v = e.target.value; if (v.startsWith('a:')) switchAct(+v.slice(2)); else addAct(v.slice(2)); $('actSel').dataset.sig = ''; drawActSel(); });
+document.getElementById('tryBtn').onclick = () => { if (TRY) tryStop(); else tryStart(); };
 document.getElementById('tlMoreBtn').onclick = () => { const on = tl.classList.toggle('more'); document.body.classList.toggle('tlmore', on); try { localStorage.setItem('yuya_tl_more', on ? '1' : ''); } catch (_) {} requestAnimationFrame(() => { tlLayout(); drawTL(); viewShift(); }); };
 try { if (localStorage.getItem('yuya_tl_more')) { document.getElementById('tl').classList.add('more'); document.body.classList.add('tlmore'); } } catch (_) {}
 document.getElementById('actDup').onclick = () => { const cur = S.acts[S.actI]; addAct(cur.slot, { name: cur.name, anim: S.anim }); };
 let boneOnly = false; document.getElementById('boneOnly').onclick = () => { boneOnly = !boneOnly; meshes.visible = !boneOnly; document.getElementById('boneOnly').classList.toggle('on', boneOnly); };
-function exitAnim() { if (ANIM.rec) ANIM.rec = null; ANIM.linkMode = false; boneOnly = false; meshes.visible = true; document.getElementById('boneOnly').classList.remove('on'); ANIM.playing = false; ANIM.traj = false; ANIM.tsel = null; if (S.rest) { applyPose(S.rest); delete S.rest; } rebuild(); }
+function exitAnim() { if (TRY) tryStop(); if (ANIM.rec) ANIM.rec = null; ANIM.linkMode = false; boneOnly = false; meshes.visible = true; document.getElementById('boneOnly').classList.remove('on'); ANIM.playing = false; ANIM.traj = false; ANIM.tsel = null; if (S.rest) { applyPose(S.rest); delete S.rest; } rebuild(); }
 function addKey(P) { const f = ANIM.f, { a } = segInfo(f); if (a && a.f !== f) { const s = segOf(a); s.fix = {}; } S.anim.keys.push({ f, pose: P }); S.anim.keys.sort((x, c) => x.f - c.f); }
 function commitPose() { if (inMirroredHalf()) { toast('後半は前半の反転で自動。前半をいじってな'); gotoFrame(ANIM.f); return; } syncTwins(); const P = snapshot(), k = keyAt(ANIM.f);
   if (k) k.pose = P; else if ((S.anim.guides || []).some(g => g.f === ANIM.f)) addKey(P); /* ガイドのコマ＝原画 */ else { const { a, b } = segInfo(ANIM.f); if (a && b) { const j = drawIdx(a, b, ANIM.f); if (j === 0) a.pose = P; else segOf(a).fix[j] = P; } else addKey(P); }
@@ -656,7 +657,7 @@ function tlLayout() { const r = tlc.getBoundingClientRect(), d = Math.min(2, dev
 const TL = { x0: 18, w: () => tlc.getBoundingClientRect().width - 36 };
 const fx = f => TL.x0 + f / S.anim.len * TL.w();
 const $ = id => document.getElementById(id);
-function drawTL() { syncSize(); if (mode !== 'pose' || !S.anim) return; const r = tlc.getBoundingClientRect(), Wt = r.width, Ht = r.height; tg.clearRect(0, 0, Wt, Ht);
+function drawTL() { syncSize(); tryUI(); if (mode !== 'pose' || !S.anim) return; const r = tlc.getBoundingClientRect(), Wt = r.width, Ht = r.height; tg.clearRect(0, 0, Wt, Ht);
   const A = S.anim, { a, b } = segInfo(ANIM.f); { const hb = document.getElementById('halfBtn'); hb.classList.toggle('on', !!A.mirrorHalf); hb.style.display = A.loop ? '' : 'none'; }
   if (A.mirrorHalf && halfOf(A) != null) { const xh = fx(halfOf(A)), xe = fx(A.len); tg.fillStyle = 'rgba(47,111,208,.10)'; tg.fillRect(xh, 2, xe - xh, Ht - 4); tg.fillStyle = '#2f6fd0'; tg.font = '800 9px sans-serif'; tg.textAlign = 'left'; tg.fillText('↔ 反転で自動', xh + 3, Ht - 4); }
   if (a && b) { const xa = fx(a.f), xb = fx(b.f), y = 14, sp = spacingOf(a, b); tg.fillStyle = 'rgba(138,79,208,.08)'; tg.fillRect(xa, 2, xb - xa, Ht - 4); tg.strokeStyle = '#2b2a27'; tg.lineWidth = 2; tg.beginPath(); tg.moveTo(xa, y); tg.lineTo(xb, y); tg.stroke();
@@ -908,7 +909,8 @@ const fingers = new Map(); let pinch = null, lastPT = '';
 over.addEventListener('pointerdown', e => {
   e.preventDefault(); try { over.setPointerCapture(e.pointerId); } catch (_) {}
   const x = e.clientX, y = e.clientY, pen = e.pointerType !== 'touch'; lastPT = e.pointerType; if (lastPT === 'mouse' && !document.body.classList.contains('pc')) { document.body.classList.add('pc'); updBtns(); }
-  const intent=editorInput.intent(e); if(intent==='ignore')return; if (intent === 'camera') { st.cam = { id: e.pointerId, x, y, pan: e.shiftKey }; orbit.goal = null; return; } /* 中ボタン（かAlt＋左）で回す、Shift付きで平行移動 */
+  const intent=editorInput.intent(e); if(intent==='ignore')return;
+  if (TRY) { if (pen) { st.cam = { id: e.pointerId, x, y, pan: e.shiftKey }; orbit.goal = null; return; } fingers.set(e.pointerId, { x, y }); st.tap = null; if (fingers.size === 2) { const [a, c] = [...fingers.values()]; pinch = { d: Math.hypot(a.x - c.x, a.y - c.y), dist: orbit.dist, m: { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 } }; } return; } /* 試し場：見るだけ（回す・寄る） */ if (intent === 'camera') { st.cam = { id: e.pointerId, x, y, pan: e.shiftKey }; orbit.goal = null; return; } /* 中ボタン（かAlt＋左）で回す、Shift付きで平行移動 */
   if (intent === 'select' && mode === 'bone' && !S.tpl && !lassoMode) { const jr = jointHit(x, y, 12); if (jr) { st.drag = { kind: 'rpress', id: e.pointerId, x, y, jh: jr, add: e.shiftKey }; return; } } /* 関節を右ドラッグ＝動かす */
   if (intent === 'select') { st.stroke = { id: e.pointerId, pts: [{ x, y }], lasso: mode === 'bone' || mode === 'pose', rclick: true, add: e.shiftKey }; return; }
   if(mode==='shape'&&detailInkMode&&e.button===0){st.stroke={id:e.pointerId,pts:[{x,y}],detailInk:true};return;} /* 右クリック：押すだけ＝1本だけ選ぶ／なぞる＝投げ縄 */
@@ -998,7 +1000,7 @@ const up = e => {
 over.addEventListener('pointerup', up); over.addEventListener('pointercancel', up);
 over.addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && !document.body.classList.contains('pc')) { document.body.classList.add('pc'); addMode = false; lassoMode = false; updBtns(); } }, true);
-addEventListener('keydown', e => { if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return; const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+addEventListener('keydown', e => { if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return; const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey; if (TRY) { if (e.key === 'Escape') tryStop(); return; }
   if (mod && k === 'z') { e.preventDefault(); document.getElementById(e.shiftKey ? 'redo' : 'undo').click(); return; }
   if (mod && k === 'y') { e.preventDefault(); document.getElementById('redo').click(); return; }
   if (mod && k === 'a') { e.preventDefault(); selectAll(); return; }
@@ -1127,8 +1129,73 @@ function jumpFit(force) { const J = jumpInfo(), FP = J ? null : flapPts(); if (!
   orbit.tx = c.x; orbit.ty = c.y + r * 0.08; orbit.tz = c.z; orbit.dist = Math.max(1.2, r / Math.tan(cam.fov * Math.PI / 360) * 1.7); }
 // 放物線のコマの点をタップ＝そのコマへ
 function arcHit(x, y) { const J = jumpInfo(); if (!J) return null; let best = null, bd = 16; for (let f = J.tk + 1; f <= S.anim.len; f++) { const p = proj(V3(jumpArc(J, f))), d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = f; } } return best; }
+// ============ 試し場（ホログラム）：跳ぶのは動きのデータだけ。本物は横で見てる（自信は減らへん。本物が跳ぶのは崖の前だけ） ============
+const TRY_H = [0.6, 1.2, 1.75]; /* 狩り場のm。1.75＝崖と同じ */
+var TRY = null;
+const holoMat = new THREE.MeshBasicMaterial({ color: 0x35c8ee, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
+const holoWire = new THREE.MeshBasicMaterial({ color: 0x7fe3ff, wireframe: true, transparent: true, opacity: 0.6, depthWrite: false });
+const holoBoxMat = new THREE.MeshBasicMaterial({ color: 0x35c8ee, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide });
+const holoEdgeMat = new THREE.LineBasicMaterial({ color: 0x2aa9d6, transparent: true, opacity: 0.9 });
+function canTry() { return isJumpAnim() && !!jumpInfo(); }
+function holoBody(P) { const g = new THREE.Group(); for (const b of S.bones) { const pts = P[b.id]; if (!pts || pts.length !== b.pts.length) continue; const G = boneGeom(Object.assign({}, b, { pts })); if (!G) continue;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(G.V, 3)); geo.setIndex(G.I); g.add(new THREE.Mesh(geo, holoMat)); g.add(new THREE.Mesh(geo, holoWire)); } return g; }
+const shift = (P, dx, dy, dz) => { const Q = {}; for (const id in P) Q[id] = P[id].map(q => [q[0] + dx, q[1] + dy, q[2] + dz]); return Q; };
+function tryStart() {
+  const J = jumpInfo(); if (!J) { toast('踏み切りが見つからへん（溜め→踏み切りの印を付けてな）'); return; }
+  ANIM.playing = false; ANIM.rec = null; st.drag = null; st.stroke = null;
+  const A = S.anim, ids = bodyIds(), size = window.BodyMotion.sizeOf(S), R = S.rest || snapshot(), g = 16;
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const id in R) for (const q of R[id]) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); z0 = Math.min(z0, q[2]); z1 = Math.max(z1, q[2]); }
+  const c0 = JumpPhys.com(poseAt(0), ids), cR = JumpPhys.com(R, ids), L = z1 - z0, Wd = x1 - x0, front = z1 - cR[2];
+  const wid = Math.max(Wd * 1.6, 0.6), gap = wid + 0.35, depth = Math.max(L * 0.8, 0.7), run = front + 0.3;
+  const root = new THREE.Group(); root.rotation.y = Math.PI / 2; root.position.set(Math.max(1.6, L * 1.1), 0, 0.4); scene.add(root); /* 中の座標：跳ぶ向き＝+z、レーン＝+x（画面では奥へ） */
+  const span = gap * TRY_H.length; { const gr = new THREE.GridHelper(1, 10, 0x35c8ee, 0x35c8ee); gr.material.transparent = true; gr.material.opacity = 0.28; gr.scale.set(span + 0.6, 1, run + depth + 1.4); gr.position.set(span / 2 - gap / 2, 0.002, (run + depth) / 2 - 0.2); root.add(gr); }
+  const lanes = TRY_H.map((h, i) => { const hb = h / size, x = i * gap, bx = new THREE.BoxGeometry(wid, hb, depth), m = new THREE.Mesh(bx, holoBoxMat); m.position.set(x, hb / 2, run + depth / 2); root.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(bx), holoEdgeMat); e.position.copy(m.position); root.add(e); return { h, hb, x, front: run, zc: run + depth / 2, depth, res: null }; });
+  const frames = []; for (let f = 0; f <= A.len; f++) { const P = poseAt(f), b = holoBody(P); b.visible = false; root.add(b); frames.push({ b, c: JumpPhys.com(P, ids) }); }
+  const rest = holoBody(R); rest.visible = false; root.add(rest);
+  TRY = { J, A, size, g, root, lanes, frames, rest, c0, cR, i: 0, ph: 'ground', t: 0, last: performance.now(), say: '（じーっ）', yaw: Math.PI / 2, orb: Object.assign({}, orbit), head: null };
+  { const hd = S.bones.reduce((a, b) => { const q = b.pts[b.pts.length - 1]; return !a || q[2] > a[2] ? q : a; }, null); TRY.head = hd ? hd.slice() : [0, 0.8, 0.6]; }
+  applyPose(R); needRebuild = true;
+  const far = root.position.x + run + depth + 0.3; orbit.goal = null; orbit.yaw = 0.62; orbit.pitch = 0.26; orbit.tx = (x0 + far) / 2 + 0.2; orbit.ty = Math.max(0.6, TRY_H[2] / size * 0.5); orbit.tz = 0.4 - span / 2;
+  orbit.dist = Math.max(4, (far - x0 + 1.2) / Math.tan(cam.fov * Math.PI / 360) * 0.62);
+  tryUI(); toast('試し場：跳んでるのはホログラム（動きのデータ）。本物は横で見てるだけ'); }
+function tryStop() { if (!TRY) return; scene.remove(TRY.root); TRY.root.traverse(o => { if (o.geometry) o.geometry.dispose(); }); Object.assign(orbit, TRY.orb, { goal: null }); TRY = null;
+  for (const gp of [meshes, detailInkGroup, cutLineGroup]) gp.rotation.y = 0; if (mode === 'pose' && S.anim) applyPose(poseAt(ANIM.f)); needRebuild = true; tryUI(); drawTL(); }
+function tryUI() { const b = document.getElementById('tryBtn'); if (!b) return; const show = !!TRY || (mode === 'pose' && canTry()); b.style.display = show ? '' : 'none'; b.textContent = TRY ? '✕ 試し場を出る' : '🧪 試し場'; b.classList.toggle('on', !!TRY);
+  for (const id of ['actSel', 'playBtn', 'tlMoreBtn']) { const e = document.getElementById(id); if (e) e.disabled = !!TRY; } document.body.classList.toggle('trying', !!TRY);
+  if (TRY) document.getElementById('frameLbl').textContent = 'このジャンプ ' + TRY.J.h.toFixed(2) + 'm'; }
+// 1本ぶん：溜め〜踏み切り（作ったコマそのまま）→ 空中（放物線）→ 箱に乗る／ぶつかって落ちる
+function tryTick(now) { if (!TRY) return; const T = TRY, dt = Math.min(0.05, (now - T.last) / 1000); T.last = now; T.t += dt; const J = T.J, A = T.A, L = T.lanes[T.i], k = T.size;
+  const show = (i, dx, dy, dz) => { T.frames.forEach((F, j) => F.b.visible = j === i); T.rest.visible = i < 0; const o = i < 0 ? T.rest : T.frames[i].b; o.position.set(dx, dy, dz); };
+  const ox = L.x - T.c0[0], oz = -T.c0[2], tg = J.tk / JumpPhys.FPS, zTk = J.comTk[2] + oz, up = t => J.vy * t - T.g * t * t / 2; /* up＝狩り場のm */
+  if (T.ph === 'ground') { const f = Math.min(J.tk, Math.floor(T.t * JumpPhys.FPS)); show(f, ox, 0, oz); if (T.t >= tg) { T.ph = 'air'; T.t = 0; T.z = zTk; T.hit = false; T.say = '（じーっ）'; } }
+  else if (T.ph === 'air') { const t = T.t, d = J.vy * J.vy - 2 * T.g * L.h, ok = d >= 0, tl = ok ? (J.vy + Math.sqrt(d)) / T.g : J.tair, f = J.tk + Math.round(Math.min(1, t / J.tair) * (A.len - J.tk)), F = T.frames[Math.min(A.len, f)];
+    let y = up(t); if (!T.hit) T.z = zTk + (L.zc - zTk) * Math.min(1, t / Math.max(0.05, tl));
+    const reach = T.z - (L.x - T.c0[0]) * 0 + Math.max(0.1, (T.head[2] - T.cR[2]) * 0.8); /* 鼻先 */
+    if (!ok && !T.hit && reach >= L.front && y < L.h) { T.hit = true; T.say = 'うっ'; }
+    if (ok && t >= tl) { L.res = 'ok'; T.ph = 'after'; T.t = 0; T.say = trySay(L, true); show(-1, L.x - T.cR[0], L.hb, T.z - T.cR[2]); return; }
+    if (!ok && T.hit && y <= 0 && t > 0.05) { L.res = 'ng'; T.ph = 'after'; T.t = 0; T.say = trySay(L, false); show(-1, L.x - T.cR[0], 0, T.z - T.cR[2]); return; }
+    if (t > J.tair + 1) { L.res = 'ng'; T.ph = 'after'; T.t = 0; T.say = trySay(L, false); return; }
+    const cy = J.comTk[1] + Math.max(T.hit ? 0 : -1, y) / k; show(Math.min(A.len, f), L.x - F.c[0], cy - F.c[1], T.z - F.c[2]); }
+  else if (T.ph === 'after') { if (T.t > 1.4) { T.i = (T.i + 1) % T.lanes.length; T.ph = T.i === 0 ? 'pause' : 'ground'; T.t = 0; if (T.i) T.say = '（じーっ）'; } }
+  else if (T.ph === 'pause') { if (T.t > 1.6) { T.lanes.forEach(l => l.res = null); T.ph = 'ground'; T.t = 0; T.say = '（じーっ）'; } }
+  /* 本物はホログラムの方を向く */ const vis = T.rest.visible ? T.rest : (T.frames.find(F => F.b.visible) || {}).b, hp = new THREE.Vector3(L.x, 0, T.ph === 'ground' ? 0 : T.z || 0).applyMatrix4(T.root.matrixWorld);
+  const want = Math.atan2(hp.x, hp.z); let dy = Math.atan2(Math.sin(want - T.yaw), Math.cos(want - T.yaw)); T.yaw += dy * Math.min(1, dt * 5); for (const gp of [meshes, detailInkGroup, cutLineGroup]) gp.rotation.y = T.yaw;
+  needDraw = true; }
+function trySay(L, ok) { const r = TRY.J.h / L.h, cliff = L === TRY.lanes[2];
+  if (!ok) return cliff ? '崖は…まだ無理か…' : '届いてへん…';
+  if (r > 1.7) return cliff ? 'え、俺こんなん跳ぶん…？' : 'え、跳びすぎちゃう…？';
+  if (r < 1.12) return cliff ? 'ギリギリ…いけるんか…！？' : 'ギリギリや…！';
+  return cliff ? 'これ…崖いけるんちゃう？' : 'おお、いけた！'; }
+function tryDraw() { const T = TRY; if (!T) return; og.save(); og.textAlign = 'center';
+  T.lanes.forEach((L, i) => { const w = new THREE.Vector3(L.x, L.hb, L.front).applyMatrix4(T.root.matrixWorld), q = proj(w), t = L.h.toFixed(2) + 'm' + (i === 2 ? '（崖）' : ''), mk = L.res === 'ok' ? ' ✓' : L.res === 'ng' ? ' ✗' : '';
+    og.font = '900 14px sans-serif'; const tw = og.measureText(t + mk).width + 14; og.fillStyle = 'rgba(255,255,255,.9)'; og.fillRect(q.x - tw / 2, q.y - 30, tw, 22); og.fillStyle = L.res === 'ok' ? '#1f9a5a' : L.res === 'ng' ? '#c0392b' : '#1d86b0'; og.fillText(t + mk, q.x, q.y - 14); });
+  const hd = new THREE.Vector3(...T.head).applyMatrix4(meshes.matrixWorld), q = proj(hd), s = T.say; og.font = '900 16px sans-serif'; const tw = og.measureText(s).width + 22, bx = Math.max(8, Math.min(W - tw - 8, q.x - tw / 2)), by = Math.max(90, q.y - 64);
+  og.fillStyle = '#fff'; og.strokeStyle = '#2b2a27'; og.lineWidth = 2; og.beginPath(); og.roundRect ? og.roundRect(bx, by, tw, 34, 14) : og.rect(bx, by, tw, 34); og.fill(); og.stroke();
+  og.beginPath(); og.moveTo(q.x - 7, by + 33); og.lineTo(q.x, q.y - 14); og.lineTo(q.x + 7, by + 33); og.closePath(); og.fill(); og.stroke(); og.fillStyle = '#fff'; og.fillRect(q.x - 6, by + 30, 12, 5);
+  og.fillStyle = '#2b2a27'; og.fillText(s, bx + tw / 2, by + 23); og.restore(); }
 function draw() {
-  og.clearRect(0, 0, W, H); if (mode === 'pose') { drawJumpArc(); drawFlapPath(); }
+  og.clearRect(0, 0, W, H); if (TRY) { tryDraw(); return; } if (mode === 'pose') { drawJumpArc(); drawFlapPath(); }
   if (mode === 'paint') { document.getElementById('panel').style.display = 'none'; document.body.classList.remove('panelOn'); return; }
   if ((S.sym || axisMode) && mode !== 'pose') { const a = AX(), seg = (p, q) => { const A = proj(new THREE.Vector3(...p)), B = proj(new THREE.Vector3(...q)); og.beginPath(); og.moveTo(A.x, A.y); og.lineTo(B.x, B.y); og.stroke(); };
     og.setLineDash([6, 6]); og.strokeStyle = axisMode ? 'rgba(138,79,208,.9)' : 'rgba(138,79,208,.35)'; og.lineWidth = axisMode ? 2 : 1.2; seg([a, 0, 0], [a, 2, 0]); seg([a, 0, -1], [a, 0, 1]); og.setLineDash([]); }
@@ -1227,7 +1294,7 @@ function updBtns() { document.getElementById('paintPicker').style.display = mode
   if (symBtn.dataset.arm !== '1') symBtn.textContent = mode === 'pose' ? '左右そろえる' : '左右対称'; symBtn.classList.toggle('on', mode === 'pose' ? !!S.animSym : !!S.sym); document.getElementById('look').textContent = smooth ? 'ローポリ' : 'なめらか';
   document.getElementById('autoLinkBtn').style.display = mode === 'bone' ? '' : 'none'; document.getElementById('flipBtn').style.display = mode === 'bone' ? '' : 'none'; document.getElementById('groundBtn').style.display = mode === 'bone' || mode === 'pose' ? '' : 'none'; for(const id of ['linkBtn','unlinkBtn','del','alignBtn','axisBtn','addJBtn','autoLinkBtn','flipBtn'])document.getElementById(id).disabled=!!S.tpl; const sh = mode === 'shape'; document.getElementById('elm').style.display = sh ? 'flex' : 'none'; document.getElementById('loopBtn').style.display = sh ? '' : 'none'; document.getElementById('stripBtn').style.display = sh ? '' : 'none'; document.getElementById('detailInkBtn').style.display=sh?'':'none';if(!sh&&detailInkMode)setDetailInkMode(false);
   const ab = document.getElementById('addBtn'); ab.style.display = sh || mode === 'bone' || mode === 'pose' ? '' : 'none'; document.getElementById('lassoBtn').style.display = mode === 'bone' || mode === 'pose' ? '' : 'none'; document.getElementById('lassoBtn').classList.toggle('on', lassoMode); ab.classList.toggle('on', addMode); document.getElementById('linkBtn').classList.toggle('on', linkMode); document.getElementById('addJBtn').classList.toggle('on', addJMode); document.getElementById('addJBtn').style.display = mode === 'bone' ? '' : 'none'; document.getElementById('axisBtn').classList.toggle('on', axisMode); }
-document.querySelectorAll('#modes button').forEach(bt => bt.addEventListener('click', () => { st.stroke=null;st.drag=null;linkMode=false;addJMode=false;lassoMode=false;mode = bt.dataset.m; document.querySelectorAll('#modes button').forEach(x => x.classList.toggle('on', x === bt)); const was = document.body.classList.contains('anim'); if (mode !== 'bone') axisMode = false; if (mode !== 'bone') selJ = null; selMir = false; if (mode === 'pose' && !was) { document.body.classList.add('anim'); enterAnim(); tlLayout(); drawTL(); viewShift(); if (S.sym && S.bones.some(b => !isCenter(b))) toast('左右バラバラに動かすなら「左右対称」を切ってな（切っても消えへん）'); } else if (mode !== 'pose' && was) { document.body.classList.remove('anim'); exitAnim(); save(); viewShift(); } updBtns(); needDraw = true; }));
+document.querySelectorAll('#modes button').forEach(bt => bt.addEventListener('click', () => { if (TRY) tryStop(); st.stroke=null;st.drag=null;linkMode=false;addJMode=false;lassoMode=false;mode = bt.dataset.m; document.querySelectorAll('#modes button').forEach(x => x.classList.toggle('on', x === bt)); const was = document.body.classList.contains('anim'); if (mode !== 'bone') axisMode = false; if (mode !== 'bone') selJ = null; selMir = false; if (mode === 'pose' && !was) { document.body.classList.add('anim'); enterAnim(); tlLayout(); drawTL(); viewShift(); if (S.sym && S.bones.some(b => !isCenter(b))) toast('左右バラバラに動かすなら「左右対称」を切ってな（切っても消えへん）'); } else if (mode !== 'pose' && was) { document.body.classList.remove('anim'); exitAnim(); save(); viewShift(); } updBtns(); needDraw = true; }));
 document.querySelectorAll('#elm button').forEach(bt => bt.addEventListener('click', () => { elm = bt.dataset.e; document.querySelectorAll('#elm button').forEach(x => x.classList.toggle('on', x === bt)); VSEL = []; needDraw = true; }));
 document.getElementById('loopBtn').addEventListener('click', () => loopSelect('ring')); document.getElementById('stripBtn').addEventListener('click', () => loopSelect('strip'));
 document.getElementById('linkBtn').addEventListener('click', () => { if(!skeletonEditable())return; if (sel == null) return; linkMode = !linkMode; updBtns(); if (linkMode) toast('つなぎ先の骨の「関節」をタップ'); });
@@ -1239,7 +1306,7 @@ document.getElementById('unlinkBtn').addEventListener('click',unlinkSelectedBone
 document.getElementById('addBtn').addEventListener('click', () => { addMode = !addMode; updBtns(); });
 const PRE = { front: [0, 0], q: [0.7, 0.25], side: [Math.PI / 2, 0], top: [0, 1.45], back: [Math.PI, 0] };
 document.querySelectorAll('#views button').forEach(bt => bt.addEventListener('click', () => { const p = PRE[bt.dataset.p]; let yaw = p[0]; if (bt.dataset.p === 'side') yaw = Math.sin(orbit.yaw) >= 0 ? Math.PI / 2 : -Math.PI / 2; /* 近い方の側面 */ orbit.goal = { yaw, pitch: p[1] }; }));
-function afterLoad() { if (JUMP) JUMP.dirty = true; setDetailInkMode(false); migrate(); migrate6(); markSynced(); if (mode === 'pose') { enterAnim(); drawTL(); } else if (S.rest) { applyPose(S.rest); delete S.rest; } sel = null; selJ = null; VSEL = []; SELB = []; linkMode = false; rebuild(); save(); updBtns(); }
+function afterLoad() { if (TRY) tryStop(); if (JUMP) JUMP.dirty = true; setDetailInkMode(false); migrate(); migrate6(); markSynced(); if (mode === 'pose') { enterAnim(); drawTL(); } else if (S.rest) { applyPose(S.rest); delete S.rest; } sel = null; selJ = null; VSEL = []; SELB = []; linkMode = false; rebuild(); save(); updBtns(); }
 document.getElementById('undo').addEventListener('click', () => { if (!undoS.length) return; redoS.push(clone(S)); S = undoS.pop(); afterLoad(); });
 document.getElementById('redo').addEventListener('click', () => { if (!redoS.length) return; undoS.push(clone(S)); S = redoS.pop(); afterLoad(); });
 function mirrorBoneData(b, newId, idMap) { // 鏡の骨を本物にする（幅の±と、形のいじりの左右を入れかえる）
@@ -1266,18 +1333,29 @@ let curWork = null; try { curWork = localStorage.getItem(CUR_KEY) || null; } cat
 function setCur(id) { curWork = id; try { id ? localStorage.setItem(CUR_KEY, id) : localStorage.removeItem(CUR_KEY); } catch (_) {} const w = loadWorks().find(x => x.id === curWork); document.getElementById('workName').textContent = w ? w.name : ''; }
 function thumb() { camUpdate(); renderer.render(scene, cam); const c = document.createElement('canvas'); c.width = 200; c.height = 150; const g = c.getContext('2d'), src = renderer.domElement, sw = src.width, sh = src.height, ar = 4 / 3; let w = sw, h = sw / ar; if (h > sh) { h = sh; w = sh * ar; } g.drawImage(src, (sw - w) / 2, (sh - h) / 2, w, h, 0, 0, 200, 150); return c.toDataURL('image/jpeg', 0.75); }
 function saveCurrent(asNew) { const l = loadWorks(), now = Date.now(); let w = !asNew && l.find(x => x.id === curWork); if (!w) { w = { id: 'w' + now, name: '作品' + (l.length + 1), created: now }; l.unshift(w); }
-  w.data = clone(S); w.updated = now; if (!w.thumbFixed) w.thumb = thumb(); if (!saveWorks(l)) { toast('保存できへんかった（容量がいっぱいかも）'); return; } setCur(w.id); toast('「' + w.name + '」に保存した'); }
+  w.data = clone(S); w.updated = now; if (!w.thumbFixed) w.thumb = thumb(); if (!saveWorks(l)) { toast('保存できへんかった（容量がいっぱいかも）'); return; } setCur(w.id); markSaved(); toast('「' + w.name + '」に保存した'); }
 function renderWorks() { const box = document.getElementById('worksList'), l = loadWorks(); box.innerHTML = ''; if (!l.length) { box.innerHTML = '<div class="empty">まだ作品がない。「保存」を押すとここに並ぶ</div>'; return; }
   for (const w of l) { const card = document.createElement('div'); card.className = 'work' + (w.id === curWork ? ' cur' : ''); const d = new Date(w.updated || w.created);
     card.innerHTML = `<img alt=""><div class="nm"></div><div class="dt">${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}</div><div class="acts"><button data-a="open">開く</button><button data-a="pic">写真</button><button data-a="dup">複製</button><button data-a="ren">名前</button><button data-a="del">消す</button></div>`;
     card.querySelector('img').src = w.thumb || ''; card.querySelector('.nm').textContent = w.name;
-    card.querySelector('[data-a=open]').onclick = () => { pushUndo(); S = clone(w.data); setCur(w.id); afterLoad(); closeWorks(); };
+    card.querySelector('[data-a=open]').onclick = () => { pushUndo(); S = clone(w.data); setCur(w.id); afterLoad(); markSaved(); closeWorks(); };
     card.querySelector('[data-a=pic]').onclick = () => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = () => { const f = inp.files[0]; if (!f) return; const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = 320; c.height = 240; const g = c.getContext('2d'), s2 = Math.max(320 / img.width, 240 / img.height); g.drawImage(img, (320 - img.width * s2) / 2, (240 - img.height * s2) / 2, img.width * s2, img.height * s2);
       const l2 = loadWorks(), t = l2.find(x => x.id === w.id); if (t) { t.thumb = c.toDataURL('image/jpeg', 0.8); t.thumbFixed = true; saveWorks(l2); renderWorks(); toast('調査表の写真を変えた'); } URL.revokeObjectURL(img.src); }; img.src = URL.createObjectURL(f); }; inp.click(); };
     card.querySelector('[data-a=dup]').onclick = () => { const l2 = loadWorks(), c2 = clone(w); c2.id = 'w' + Date.now(); c2.name = w.name + 'のコピー'; c2.created = c2.updated = Date.now(); l2.unshift(c2); saveWorks(l2); renderWorks(); };
     card.querySelector('[data-a=ren]').onclick = () => { const nm = card.querySelector('.nm'), inp = document.createElement('input'); inp.value = w.name; nm.replaceWith(inp); inp.focus(); inp.select(); const done = () => { const l2 = loadWorks(), t = l2.find(x => x.id === w.id); if (t && inp.value.trim()) { t.name = inp.value.trim(); saveWorks(l2); } renderWorks(); setCur(curWork); }; inp.onblur = done; inp.onkeydown = ev => { if (ev.key === 'Enter') inp.blur(); }; };
     const del = card.querySelector('[data-a=del]'); del.onclick = () => { if (del.dataset.arm !== '1') { del.dataset.arm = '1'; del.textContent = 'もう一度'; setTimeout(() => { del.dataset.arm = ''; del.textContent = '消す'; }, 2500); return; } saveWorks(loadWorks().filter(x => x.id !== w.id)); if (curWork === w.id) setCur(null); renderWorks(); };
     box.appendChild(card); } }
+// ---- 保存してへん印：作品に入ってる中身と、今の状態を比べる（アニメ中のポーズや選んでる動きの違いは無視） ----
+function workKey(s) { const o = clone(s); if (o.rest) { for (const b of o.bones || []) if (o.rest[b.id]) b.pts = o.rest[b.id]; delete o.rest; } if (o.acts && o.actI != null && o.acts[o.actI]) { o.acts[o.actI] = Object.assign({}, o.acts[o.actI], { anim: o.anim || o.acts[o.actI].anim || null }); delete o.anim; delete o.actI; } return JSON.stringify(o); }
+const keyHash = t => { let h = 5381; for (let i = 0; i < t.length; i++) h = (h * 33 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + ':' + t.length; };
+const SAVED_KEY = 'yuya_ws_saved_hash';
+let savedHash = null, unsaved = false;
+function markSaved() { savedHash = keyHash(workKey(S)); try { localStorage.setItem(SAVED_KEY, JSON.stringify({ id: curWork, h: savedHash })); } catch (_) {} checkUnsaved(); }
+function refreshSaved() { savedHash = null; try { const o = JSON.parse(localStorage.getItem(SAVED_KEY) || 'null'); if (o && o.id === curWork) savedHash = o.h; } catch (_) {}
+  if (!savedHash) { const w = curWork && loadWorks().find(x => x.id === curWork); if (w && w.data) savedHash = keyHash(workKey(w.data)); } checkUnsaved(); }
+function checkUnsaved() { unsaved = !!(S && S.bones && S.bones.length) && (!savedHash || keyHash(workKey(S)) !== savedHash); const b = document.getElementById('saveBtn'); if (b) { b.classList.toggle('unsaved', unsaved); b.title = unsaved ? 'まだ保存してへん（狩り場の相棒は前の形・動きのまま）' : '保存済み'; } }
+window.__unsaved = () => { checkUnsaved(); return unsaved; };
+window.__saveWork = () => { saveCurrent(false); return !unsaved; };
 const closeWorks = () => document.getElementById('worksDlg').classList.remove('show');
 document.getElementById('saveBtn').onclick = () => saveCurrent(false);
 document.getElementById('worksBtn').onclick = () => { renderWorks(); document.getElementById('worksDlg').classList.add('show'); };
@@ -1309,8 +1387,8 @@ function startSpecies(k) { const D = TPL.data(k); if (!D) return; pushUndo(); co
 document.getElementById('newWork').onclick = () => { pushUndo(); S = newState(); setCur(null); afterLoad(); closeWorks(); toast('まっさら。ペンで骨を描こう'); };
 // ============ ループ ============
 addEventListener('resize', () => { if (mode === 'pose') { tlLayout(); drawTL(); } });
-function loop() { const now=performance.now(); animTick(now); paceTrialTick(now); camUpdate(); if (needRebuild) { needRebuild = false; rebuild(); } renderer.render(scene, cam); draw(); requestAnimationFrame(loop); }
-migrate6(); markSynced(); setCur(curWork); rebuild(); updBtns(); requestAnimationFrame(loop);
+function loop() { const now=performance.now(); animTick(now); tryTick(now); paceTrialTick(now); camUpdate(); if (needRebuild) { needRebuild = false; rebuild(); } renderer.render(scene, cam); draw(); requestAnimationFrame(loop); }
+migrate6(); markSynced(); setCur(curWork); refreshSaved(); rebuild(); updBtns(); requestAnimationFrame(loop);
 // 拾った設計図（種族）の骨は固定：数・つながり・長さ・大きさは変えられへん。形とアニメで自分の腕を出す
 { const bb = document.querySelector('#modes [data-m="bone"]');
   bb.addEventListener('click', e => { if (S && S.tpl) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
