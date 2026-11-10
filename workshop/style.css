@@ -67,3 +67,8 @@ body:not(.anim) #tryBtn { display:none !important; }
 #tryBtn.on { background:#1d86b0; border-color:#1d86b0; color:#fff; }
 body.trying #tlMore, body.trying #tlc, body.trying #hint { display:none !important; }
 #tl .btn:disabled { opacity:.4; }
+#tryBar { position:fixed; top:calc(104px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); display:none; gap:6px; z-index:8; align-items:center; background:var(--panel); border:1.5px solid var(--line); border-radius:12px; padding:5px 8px; white-space:nowrap; }
+#tryBar .btn { font-size:14px; padding:7px 12px; } #tryBar .btn.on { background:#1d86b0; border-color:#1d86b0; color:#fff; }
+.tryNote { font-size:11px; font-weight:800; color:var(--sub); margin-left:4px; }
+#tryJump { display:none; position:fixed; right:18px; bottom:calc(110px + env(safe-area-inset-bottom)); width:100px; height:100px; border-radius:50%; border:0; background:#1d86b0; color:#fff; font:900 20px sans-serif; z-index:8; touch-action:none; box-shadow:0 4px 14px #0003; -webkit-user-select:none; user-select:none; }
+#tryJump small { display:block; font-size:9px; font-weight:800; margin-top:3px; opacity:.85; } body.tryCtl #tryJump { display:block; }
