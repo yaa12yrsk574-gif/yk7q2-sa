@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#122826"><title>プルプルの島 — 体験試作</title>
+<link rel="stylesheet" href="./style.css"></head>
+<body>
+<div id="stage"></div>
+<div id="hud">
+ <div class="top">
+  <div class="brand"><small>PU-RU / PLAYABLE PROTOTYPE</small><strong>プルプルの島</strong></div>
+  <div class="actions"><button id="helpBtn" title="操作説明">?</button><button id="openWorkshop">⚒ 工房</button></div>
+ </div>
+ <div class="quest"><span id="chapter">はじめまして</span><strong id="goal">浜辺を歩いてみよう</strong></div>
+ <div id="speech" role="status"><span class="speaker">プルプル</span><span id="line">あ、あの……は、初めまして……！</span></div>
+ <div id="event" hidden><button id="interact">見てみる</button></div>
+ <div class="play">
+   <div id="movePad" class="pad move" aria-label="移動パッド"><div id="moveRing"><div id="moveKnob"></div></div><small>移動</small></div>
+   <div class="center-hint"><div>高さ <strong id="height">0.0</strong>m</div><div>溜め <strong id="charge">0</strong>%</div><div class="cue">右：下で溜める → 上へ弾く</div></div>
+   <div id="posePad" class="pad pose" aria-label="アニメーションコマ操作"><div class="pose-title">アニメのコマ</div><div class="pose-track"><div id="poseKnob"></div></div><div class="pose-labels"><span>伸びる</span><span>しゃがむ</span></div></div>
+ </div>
+</div>
+<div id="panel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
+ <div class="sheet">
+  <header><div><small>WORKSHOP / ものづくり</small><h2 id="panelTitle">プルプルの身体をつくる</h2></div><button id="closeWorkshop">試してみる ✓</button></header>
+  <p class="muted">関節を入れなくても遊べる。形と動きを変えて、外で試そう。</p>
+  <div class="rigs">
+   <button data-rig="blob" class="chosen">ぷるぷる（関節なし）</button>
+   <button data-rig="legs">二脚（関節あり）</button>
+  </div>
+  <div class="grid">
+   <label>身体の大きさ <output id="sizeOut">1.00</output><input data-design="size" type="range" min=".70" max="1.4" step=".05" value="1"></label>
+   <label>弾力 <output id="springOut">1.00</output><input data-design="spring" type="range" min=".55" max="1.5" step=".05" value="1"></label>
+   <label>しゃがむ深さ <output id="crouchOut">1.00</output><input data-design="crouch" type="range" min=".5" max="1.5" step=".05" value="1"></label>
+   <label>伸びる大きさ <output id="extendOut">1.00</output><input data-design="extend" type="range" min=".6" max="1.5" step=".05" value="1"></label>
+   <label>脚の長さ <output id="legOut">1.00</output><input data-design="leg" type="range" min=".6" max="1.5" step=".05" value="1"></label>
+   <label>体の色 <select id="color"><option value="mint">海のしずく</option><option value="pink">朝焼け</option><option value="blue">空色</option><option value="gold">木漏れ日</option></select></label>
+  </div>
+  <label class="check"><input id="wings" type="checkbox"> 羽飾りをつける（今は装飾だけ）</label>
+  <div class="worknote" id="craftHint">できた！ まずは草原で跳んでみよう。</div>
+  <div class="sheet-actions"><button id="resetDesign">身体を元に戻す</button><button class="primary" id="closeWorkshop2">この身体で試す</button></div>
+ </div>
+</div>
+<div id="help" class="panel hidden" role="dialog" aria-modal="true" aria-label="操作説明">
+ <div class="sheet smallsheet"><h2>遊び方</h2><p>左パッドで島を歩く。右のコマを下まで動かしてしゃがんだまま待ち、上へ素早く弾くとジャンプ。</p><p>工房で身体を変えて同じ場所に挑戦。生き物の近くで「見る」、デカブツの前で「相撲する」が出る。キーボードはWASDで移動、↑/↓で姿勢コマ、Eで調べる。</p><p>プルプル自身の「やりたい」をきっかけに遊ぶ。正解の形を再現する必要はありません。</p><button id="closeHelp" class="primary">わかった</button></div>
+</div>
+<script src="../vendor/three.min.js"></script>
+<script src="./world.js"></script><script src="./controls.js"></script><script src="./app.js"></script>
+</body></html>
