@@ -1210,11 +1210,23 @@ function hStep(dt, inp) { const T = TRY, h = T.h, P = T.Tn, M = T.M, J = M.jump 
   else if (mag > 0.05) { h.yaw = turnTo(h.yaw, ty, (P.airTurn || 1.3) * dt); h.v += (mag * pr.top * 0.7 - h.v) * Math.min(1, dt * 1.2); }
   // 状態
   const startFlap = () => { h.st = 'flap'; h.f = 0; h.flapped = false; };
-  if (h.st === 'ground' && inp.press) { if (J) { h.st = 'charge'; h.f = 0; h.lifted = false; } else { h.vy = P.jumpV || 6.4; h.y += 0.001; h.st = 'air'; h.lifted = true; h.from = 'hop'; } }
-  if (h.st === 'charge') { h.f = Math.min(J.hold, h.f + dt * FR); if (inp.up || !inp.held) { h.st = 'takeoff'; h.f = Math.max(h.f, J.hold); } }
-  else if (h.st === 'takeoff') { h.f = Math.min(J.tk, h.f + dt * FR); if (h.f >= J.tk) { const m = M.jump, a = m.c[0], b = J.comTk, dx = b[0] - a[0], dz = b[2] - a[2], s = T.size, sy = Math.sin(h.yaw), cy = Math.cos(h.yaw);
-      h.x += (dx * cy + dz * sy) * s; h.z += (-dx * sy + dz * cy) * s; h.vy = J.vy; h.v = Math.max(h.v, J.vh[1] || 0); h.y += 0.001; h.st = 'jair'; h.airT = 0; h.lifted = true; h.from = 'jump'; h.bonk = false; } }
-  else if (h.st === 'jair') { h.airT += dt; h.f = J.tk + Math.min(1, h.airT / Math.max(0.05, J.tair)) * (M.jump.len - J.tk); if (inp.press && Fl) startFlap(); else if (h.airT >= J.tair) h.st = 'air'; }
+  // 踏み切り：作ったコマの重心の動き × 指でこすった速さ（弾き）× しゃがみで溜めた分（上限が上がる）
+  const lift = (sp, c) => { const m = M.jump, a = m.c[0], b = J.comTk, dx = b[0] - a[0], dz = b[2] - a[2], s = T.size, sy = Math.sin(h.yaw), cy = Math.cos(h.yaw), r2 = Math.min(J.rSpeed * sp, J.rCap * (0.85 + 0.3 * c)), k = J.r > 1e-4 ? r2 / J.r : 1;
+    h.x += (dx * cy + dz * sy) * s; h.z += (-dx * sy + dz * cy) * s; h.vy = J.vy * k; h.v = Math.max(h.v, (J.vh[1] || 0) * k); h.y += 0.001; h.st = 'jair'; h.airT = 0; h.lifted = true; h.from = 'jump'; h.bonk = false; h.rail = false;
+    h.tair = 2 * h.vy / g; T.last2 = { c, sp, h: h.vy * h.vy / (2 * g), lim: J.rSpeed * sp > J.rCap * (0.85 + 0.3 * c) }; };
+  // 右のレール（指）でコマを動かす：下へ＝しゃがむ（下で止めると溜まる）、上へ弾く＝伸びて踏み切る
+  const R = T.rail; if (R && J && (h.st === 'ground' || h.rail)) { const v = R.v;
+    if (h.st === 'ground' && R.active && v > 0.06) { h.st = 'charge'; h.rail = true; h.vmax = 0; h.c = 0; h.lifted = false; }
+    if (h.rail && h.st === 'charge') { h.vmax = Math.max(h.vmax, v); h.f = Math.min(1, v / 0.9) * J.hold; if (v >= 0.86) h.c = Math.min(1, h.c + dt / 0.6);
+      if (h.vmax >= 0.82 && v < h.vmax - 0.05) { h.st = 'takeoff'; h.t0 = T.t; h.v0 = h.vmax; } else if (!R.active) { h.st = 'ground'; h.rail = false; h.c = 0; } }
+    else if (h.rail && h.st === 'takeoff') { const u = Math.max(0, Math.min(1, (h.v0 - v) / Math.max(0.3, h.v0 - 0.1))); h.f = J.hold + u * (J.tk - J.hold);
+      if (u >= 1 || (!R.active && u > 0.5)) lift(Math.max(0.3, Math.min(1.7, ((J.tk - J.hold) * u / JumpPhys.FPS) / Math.max(0.03, T.t - h.t0))), h.c); else if (!R.active) { h.st = 'ground'; h.rail = false; h.c = 0; } } }
+  if (!h.rail) {
+  if (h.st === 'ground' && inp.press) { if (J) { h.st = 'charge'; h.f = 0; h.lifted = false; h.c = 0; } else { h.vy = P.jumpV || 6.4; h.y += 0.001; h.st = 'air'; h.lifted = true; h.from = 'hop'; } }
+  if (h.st === 'charge') { h.f = Math.min(J.hold, h.f + dt * FR); if (h.f >= J.hold) h.c = Math.min(1, (h.c || 0) + dt / 0.6); if (inp.up || !inp.held) { h.st = 'takeoff'; h.f = Math.max(h.f, J.hold); } }
+  else if (h.st === 'takeoff') { h.f = Math.min(J.tk, h.f + dt * FR); if (h.f >= J.tk) lift(1, h.c || 0); }
+  }
+  else if (h.st === 'jair') { h.airT += dt; const ta = h.tair || J.tair; h.f = J.tk + Math.min(1, h.airT / Math.max(0.05, ta)) * (M.jump.len - J.tk); if (inp.press && Fl) startFlap(); else if (h.airT >= ta) h.st = 'air'; }
   else if (h.st === 'air') { if (inp.press && Fl) startFlap(); }
   else if (h.st === 'flap') { const prev = h.f; h.f = Math.min(Fl.len, h.f + dt * FR); if (!h.flapped && prev < Fl.down && h.f >= Fl.down) { h.vy = Math.max(h.vy, 0) * 0.35 + (P.flapV || 4.6) * Fl.Fx.r; h.flapped = true; h.flaps++; }
     if (inp.press && h.flapped) { h.f = 0; h.flapped = false; } else if (h.f >= Fl.len) { h.st = 'air'; h.from = 'flap'; } }
@@ -1281,6 +1293,12 @@ function tryUI() { const b = document.getElementById('tryBtn'); if (!b) return; 
   let bar = document.getElementById('tryBar'); if (!bar) { bar = document.createElement('div'); bar.id = 'tryBar'; document.body.appendChild(bar); const jb = document.createElement('button'); jb.id = 'tryJump'; jb.innerHTML = '跳ぶ<small>空中で押すと羽ばたき</small>'; document.body.appendChild(jb);
     const dn = e => { e.preventDefault(); if (!TRY) return; tryCtl(); TRY.btn.held = true; TRY.btn.press++; try { jb.setPointerCapture(e.pointerId); } catch (_) {} }, upf = e => { if (!TRY || !TRY.btn.held) return; TRY.btn.held = false; TRY.btn.up++; };
     jb.addEventListener('pointerdown', dn); jb.addEventListener('pointerup', upf); jb.addEventListener('pointercancel', upf); }
+  let rail = document.getElementById('tryRail'); if (!rail) { rail = document.createElement('div'); rail.id = 'tryRail'; rail.innerHTML = '<b>コマ</b><span class="lab">立ち・踏み切り</span><div class="tr"><i class="tk"></i></div><span class="lab">しゃがみ</span><small>下で止めて溜める<br>→上へ弾く<br>空中で触ると羽ばたき</small>'; document.body.appendChild(rail);
+    const tr = rail.querySelector('.tr'), at = e => { const r = tr.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)); };
+    rail.addEventListener('pointerdown', e => { e.preventDefault(); if (!TRY) return; tryCtl(); const T = TRY, air = T.h && (T.h.st === 'jair' || T.h.st === 'air' || T.h.st === 'flap'); if (air) { T.btn.press++; T.btn.held = true; }
+      T.rail = { id: e.pointerId, v: air ? 0 : at(e), active: !air }; try { rail.setPointerCapture(e.pointerId); } catch (_) {} });
+    rail.addEventListener('pointermove', e => { if (TRY && TRY.rail && TRY.rail.id === e.pointerId && TRY.rail.active) TRY.rail.v = at(e); });
+    const ru = e => { if (TRY && TRY.rail && TRY.rail.id === e.pointerId) { TRY.rail.active = false; TRY.btn.held = false; } }; rail.addEventListener('pointerup', ru); rail.addEventListener('pointercancel', ru); }
   if (!TRY) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex'; bar.innerHTML = TRY.slots.map(([s, n]) => '<button class="btn' + (TRY.mode === 'demo' && TRY.slot === s ? ' on' : '') + '" data-s="' + s + '">' + n + '</button>').join('') + '<span class="tryNote">' + (TRY.mode === 'ctl' ? '操作中：ボタンを押すとお手本に戻る' : '触ると動かせる') + '</span>';
   bar.querySelectorAll('button').forEach(x => x.onclick = () => tryDemo(x.dataset.s));
@@ -1294,7 +1312,11 @@ function tryDraw() { const T = TRY; if (!T) return; og.save(); og.textAlign = 'c
   if (q.x > -50 && q.x < W + 50 && q.y > 0 && q.y < H) { og.fillStyle = '#fff'; og.strokeStyle = '#2b2a27'; og.lineWidth = 2; og.beginPath(); og.roundRect ? og.roundRect(bx, by, tw, 34, 14) : og.rect(bx, by, tw, 34); og.fill(); og.stroke();
     og.beginPath(); og.moveTo(q.x - 7, by + 33); og.lineTo(q.x, Math.max(by + 40, q.y - 14)); og.lineTo(q.x + 7, by + 33); og.closePath(); og.fill(); og.stroke(); og.fillStyle = '#fff'; og.fillRect(q.x - 6, by + 30, 12, 5); og.fillStyle = '#2b2a27'; og.fillText(s, bx + tw / 2, by + 23); }
   if (T.stick) { og.strokeStyle = 'rgba(29,134,176,.6)'; og.lineWidth = 3; og.beginPath(); og.arc(T.stick.x0, T.stick.y0, 60, 0, 7); og.stroke(); const dx = T.stick.x - T.stick.x0, dy = T.stick.y - T.stick.y0, r = Math.hypot(dx, dy), k = r > 60 ? 60 / r : 1; og.fillStyle = 'rgba(29,134,176,.75)'; og.beginPath(); og.arc(T.stick.x0 + dx * k, T.stick.y0 + dy * k, 24, 0, 7); og.fill(); }
-  if (T.mode === 'ctl') { og.font = '800 12px sans-serif'; const t = document.body.classList.contains('pc') ? 'WASD 移動・Shift 歩く・Space 長押し→離す でジャンプ・空中で Space ＝羽ばたき' : '左をなぞって移動・右下のボタン 長押し→離す でジャンプ（空中で押すと羽ばたき）'; const tw2 = og.measureText(t).width + 18; og.fillStyle = 'rgba(255,255,255,.88)'; og.fillRect(W / 2 - tw2 / 2, 158, tw2, 22); og.fillStyle = '#2b2a27'; og.fillText(t, W / 2, 173); }
+  if (T.mode === 'ctl') { og.font = '800 12px sans-serif'; const t = document.body.classList.contains('pc') ? 'WASD 移動・Shift 歩く・右のレールでコマを動かして跳ぶ（Space でも可）・空中で Space ＝羽ばたき' : '左をなぞって移動・右のレールを下へ→止めて溜め→上へ弾くとジャンプ'; const tw2 = og.measureText(t).width + 18; og.fillStyle = 'rgba(255,255,255,.88)'; og.fillRect(W / 2 - tw2 / 2, 158, tw2, 22); og.fillStyle = '#2b2a27'; og.fillText(t, W / 2, 173); }
+  if (T.mode === 'ctl') { const h = T.h, L2 = T.last2, rows = []; if (h && h.rail && (h.st === 'charge' || h.st === 'takeoff')) rows.push('溜め ' + Math.round((h.c || 0) * 100) + '%');
+    if (L2) rows.push('前のジャンプ：溜め ' + Math.round(L2.c * 100) + '%・弾き ×' + L2.sp.toFixed(2) + '・高さ ' + L2.h.toFixed(2) + 'm' + (L2.lim ? '（溜めの上限）' : ''));
+    og.font = '800 13px sans-serif'; rows.forEach((r, i) => { const tw3 = og.measureText(r).width + 18; og.fillStyle = 'rgba(255,255,255,.9)'; og.fillRect(W / 2 - tw3 / 2, 186 + i * 26, tw3, 22); og.fillStyle = '#1d86b0'; og.fillText(r, W / 2, 202 + i * 26); });
+    const k = document.querySelector('#tryRail .tk'); if (k && h) { const J = T.M.jump && T.M.jump.J, v = T.rail && T.rail.active ? T.rail.v : (J && (h.st === 'charge' || h.st === 'takeoff') ? (h.st === 'charge' ? h.f / Math.max(1, J.hold) * 0.9 : 0.9 * (1 - (h.f - J.hold) / Math.max(1, J.tk - J.hold))) : 0); k.style.top = (v * 100) + '%'; k.classList.toggle('full', !!(h.c >= 1 && h.st === 'charge')); } }
   og.restore(); }
 function tryKey(e, down) { const T = TRY, k = e.key.toLowerCase(); if (down && k === 'escape') { tryStop(); return; } if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', ' '].includes(k)) return; e.preventDefault();
   if (down) { if (k !== 'shift') tryCtl(); if (k === ' ' && !e.repeat) T.keys.press = (T.keys.press || 0) + 1; T.keys.add(k); } else { if (k === ' ') T.keys.up = (T.keys.up || 0) + 1; T.keys.delete(k); } }
