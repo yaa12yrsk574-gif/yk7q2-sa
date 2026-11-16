@@ -428,6 +428,7 @@ function buildTune() { const box = document.getElementById('tuneRows'), T = wind
   row.querySelector('button').onclick = () => { testSize = null; show(); applyMateSize(); }; show(); box.appendChild(row); }
 document.getElementById('tuneBtn').onclick = () => { const t = document.getElementById('tune'); t.classList.toggle('show'); if (t.classList.contains('show')) buildTune(); };
 document.getElementById('tuneClose').onclick = () => document.getElementById('tune').classList.remove('show');
+{ const b = document.createElement('button'); b.className = 'btn'; b.textContent = '🧪 相撲へ'; b.title = 'お試し：夢を飛ばして崖の上の土俵へ'; b.onclick = () => SUMO.warp(); const c = document.getElementById('tuneClose'); c.parentNode.insertBefore(b, c); }
 document.getElementById('tuneReset').onclick = () => { window.BodyMotion.reset(); buildTune(); applyMateSize(); msg('初期値に戻した'); };
 document.getElementById('tuneCopy').onclick = () => { const t = JSON.stringify(window.BodyMotion.load()); try { navigator.clipboard.writeText(t).then(() => msg('コピーした'), () => prompt('コピーしてな', t)); } catch (_) { prompt('コピーしてな', t); } };
 // ============ 入力 ============
@@ -841,7 +842,10 @@ const SUMO = (() => {
     if (!on && cool <= 0 && riding && mate && mate.y > Y - 0.2 && Math.hypot(mate.x - C.x, mate.z - C.z) < RR - 0.4 && (mate.st === 'ground' || mate.st === 'land')) start(); }
   // カメラ：土俵の横から。2体が並んで見える
   function shot() { if (!on) return null; const cx = (me.x + op.x) / 2, cz = (me.z + op.z) / 2; return { eye: new THREE.Vector3(C.x + (cx - C.x) * 0.3, Y + 3.8, C.z - 7.8), look: new THREE.Vector3(cx, Y + 0.3, cz) }; } /* 木と反対の、崖の奥側から */
-  return { tick, step, shot, reveal, on: () => on, state: () => ({ shown, on, ph, wins, foe: foe && foe.name, me: me && { x: +me.x.toFixed(2), z: +me.z.toFixed(2), chg: +me.chg.toFixed(2) }, op: op && { x: +op.x.toFixed(2), z: +op.z.toFixed(2) } }) };
+  // お試し：⚙ の「相撲へ」で、夢を飛ばして土俵の前へ（相棒に乗ったまま）
+  function warp() { if (!mate) { msg('先に相棒をえらんでな'); return; } reveal(); if (!riding) setRide(true, true); mate.x = C.x - RR - 1.2; mate.z = C.z; mate.y = Y; mate.vy = 0; mate.v = 0; mate.st = 'ground'; mate.yaw = Math.PI / 2; pl.x = mate.x; pl.z = mate.z; pl.y = Y; camYaw = camYawT = Math.PI / 2; camPos = null; camEye = null;
+    document.getElementById('tune').classList.remove('show'); msg('土俵の前。前に進んで土俵に入ると始まる'); }
+  return { tick, step, shot, reveal, warp, on: () => on, state: () => ({ shown, on, ph, wins, foe: foe && foe.name, me: me && { x: +me.x.toFixed(2), z: +me.z.toFixed(2), chg: +me.chg.toFixed(2) }, op: op && { x: +op.x.toFixed(2), z: +op.z.toFixed(2) } }) };
 })();
 // 影（空中で高さが分かるように）
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })); shadow.rotation.x = -Math.PI / 2; scene.add(shadow);
