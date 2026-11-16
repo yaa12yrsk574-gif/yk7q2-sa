@@ -2,7 +2,7 @@
 
 
 
-const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=ab2c3b219733'; let toolLoaded = false;
+const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=588cf2def162'; let toolLoaded = false;
 // 狩り場はiframe。子だけのblurでは、画面分割やウィンドウ切替で取り逃す場合がある
 window.__gameOn = true;
 window.__openTool = () => document.querySelector('#tabs button[data-t="tool"]').click();
@@ -17,10 +17,10 @@ function leaveAsk(go) { let d = document.getElementById('leaveDlg'); if (!d) { d
     document.body.appendChild(d); }
   d.style.display = 'flex'; d.querySelectorAll('button').forEach(x => x.onclick = () => { d.style.display = 'none'; const a = x.dataset.a; if (a === 'save') { try { fT.contentWindow.__saveWork(); } catch (_) {} go(); } else if (a === 'go') go(); }); }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { if (b.dataset.t === 'game' && fT.classList.contains('on')) { let un = false; try { un = !!(fT.contentWindow.__unsaved && fT.contentWindow.__unsaved()); } catch (_) {} if (un) { leaveAsk(() => switchTab(b)); return; } } switchTab(b); });
-function switchTab(b) { stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+function switchTab(b) { const fromTool = fT.classList.contains('on'); stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
   if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=f903bec1049f'; }
-  if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); fG.contentWindow.focus(); } catch (_) {} } else { try { fT.contentWindow.focus(); } catch (_) {} } }
+  if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); if (fromTool) fG.contentWindow.__field.back(); fG.contentWindow.focus(); } catch (_) {} } else { try { fT.contentWindow.focus(); } catch (_) {} } }
 
 // <bone_sync>
 // ---- 工房・狩り場の作品をクラウド（このページのdb）と同期する ----
