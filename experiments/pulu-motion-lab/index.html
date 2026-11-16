@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>プルプル運動実験室</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;background:#132025;color:#e9fff3}*{box-sizing:border-box}body{margin:0}main{max-width:1050px;margin:auto;padding:12px}header{display:flex;align-items:center;justify-content:space-between;gap:10px}h1{font-size:clamp(18px,3vw,27px)}button{font:inherit;border-radius:9px;border:1px solid #6fa99b;background:#26483f;color:#d7ffec;padding:9px}#field{position:relative;height:55vh;min-height:345px;max-height:530px;border:1px solid #638e82;border-radius:18px;overflow:hidden;touch-action:none}canvas{width:100%;height:100%;display:block}#status{position:absolute;top:9px;left:10px;background:#16332cc9;padding:6px 9px;border-radius:10px;font-size:11px}.stats{position:absolute;right:10px;top:9px;background:#16332cc9;padding:7px;border-radius:10px;display:flex;gap:10px;font-size:10px}.stats b{color:#aaffda}.pad{position:absolute;bottom:14px;border:1px solid #8dcab26b;background:#132b2bd8;border-radius:14px;text-align:center;touch-action:none;user-select:none;padding:10px;font-size:12px}#move{left:12px;width:142px;height:111px}#pose{right:12px;width:112px;height:228px}.track{position:relative;background:#2c5b52;margin:15px auto 0;border-radius:30px;height:34px;width:100%}.knob{position:absolute;top:50%;left:50%;width:42px;height:42px;border-radius:50%;background:#a8f7d7;transform:translate(-50%,-50%);box-shadow:0 0 13px #a3ffe666}.rail{position:relative;height:154px;width:17px;background:#35655d;margin:10px auto;border-radius:9px}.pknob{position:absolute;top:40%;left:50%;width:50px;height:25px;background:#a2f2d0;border:2px solid #fff;border-radius:7px;transform:translate(-50%,-50%)}.pad small{display:block;color:#a7cfc1;font-size:10px;margin:4px}.hint{font-size:13px;line-height:1.7;color:#b6dbcd}.rigs{display:flex;gap:9px;margin:14px 0}.selected{background:#458570;border-color:#cbffe0}.settings{display:grid;grid-template-columns:1fr 1fr;gap:16px 30px}.settings label{font-size:12px}.settings input{width:100%;display:block;accent-color:#a9f4d7;margin-top:9px}.settings output{float:right;color:#a9f4d7}footer{font-size:11px;color:#9bb9ac;margin:20px 0}@media(max-width:650px){.stats{right:6px;gap:5px;font-size:9px}#move{left:8px;width:122px;height:105px}#pose{right:8px;width:102px;height:214px}.rail{height:140px}.settings{gap:12px}}
+</style></head><body><main>
+<header><h1>プルプル運動実験室</h1><button id="reset">リセット</button></header>
+<section id="field"><canvas id="scene"></canvas><div id="status">しゃがんで溜めよう</div><div class="stats"><span>最高 <b id="height">0.00</b> m</span><span>速さ <b id="speed">0.0</b></span><span>溜め <b id="charge">0</b>%</span></div>
+<div id="move" class="pad"><b>移動</b><div class="track"><div class="knob" id="mk"></div></div><small>左右に動かす</small></div>
+<div id="pose" class="pad"><b>アニメのコマ</b><div class="rail"><div class="pknob" id="pk"></div></div><small>上：伸びる ／ 下：しゃがむ</small></div></section>
+<p class="hint">右のコマを<strong>下へ動かして止める</strong> → 溜める → <strong>上へ素早くなぞる</strong>とジャンプ。左で移動。</p>
+<h3>身体と動きの設計</h3><div class="rigs"><button class="selected" data-rig="blob">関節なし</button><button data-rig="joint">二脚</button></div>
+<div class="settings"><label>身体の大きさ<output id="bodyVal">1.00</output><input id="body" type="range" min=".7" max="1.5" step=".05" value="1"></label>
+<label>接地／脚の長さ<output id="legVal">1.00</output><input id="leg" type="range" min=".6" max="1.6" step=".05" value="1"></label>
+<label>しゃがみの深さ<output id="crouchVal">1.00</output><input id="crouch" type="range" min=".5" max="1.5" step=".05" value="1"></label>
+<label>伸びの大きさ<output id="extendVal">1.00</output><input id="extend" type="range" min=".5" max="1.5" step=".05" value="1"></label></div>
+<footer>本編とは別の簡易2D操作実験です。実際の骨物理・アニメ編集は未実装です。</footer></main>
+<script>
+const $=id=>document.getElementById(id),c=$('scene'),ctx=c.getContext('2d'),d={rig:'blob',body:1,leg:1,crouch:1,extend:1},input={move:0,pose:.4,speed:0};
+const initial=()=>({x:0,y:0,vx:0,vy:0,charge:0,ready:false,ground:true,peak:0,pulse:0});
+const s=initial(),clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),TAU=Math.PI*2;
+for(const id of ['body','leg','crouch','extend'])$(id).addEventListener('input',()=>{d[id]=Number($(id).value);$(id+'Val').value=d[id].toFixed(2)});
+for(const b of document.querySelectorAll('[data-rig]'))b.addEventListener('click',()=>{d.rig=b.dataset.rig;for(const a of document.querySelectorAll('[data-rig]'))a.classList.toggle('selected',a===b)});
+$('reset').onclick=()=>Object.assign(s,initial());
+let moving=null,posing=null,lastPose=performance.now(),idleTimer;
+function movep(e){const r=$('move').querySelector('.track').getBoundingClientRect();input.move=clamp((e.clientX-r.left)/r.width)*2-1;$('mk').style.left=(50+input.move*33)+'%'}
+function posep(e){const r=$('pose').querySelector('.rail').getBoundingClientRect(),t=performance.now(),v=clamp((e.clientY-r.top)/r.height);input.speed=(v-input.pose)/Math.max(.012,(t-lastPose)/1000);input.pose=v;lastPose=t;$('pk').style.top=(100*v)+'%';clearTimeout(idleTimer);idleTimer=setTimeout(()=>input.speed=0,130)}
+for(const [id,start,move,end] of [['move',e=>{moving=e.pointerId;movep(e)},e=>{if(moving===e.pointerId)movep(e)},e=>{if(moving===e.pointerId){moving=null;input.move=0;$('mk').style.left='50%'}}],['pose',e=>{posing=e.pointerId;lastPose=performance.now();posep(e)},e=>{if(posing===e.pointerId)posep(e)},e=>{if(posing===e.pointerId){posing=null;input.speed=0}}]]){
+const el=$(id);el.addEventListener('pointerdown',e=>{if((id==='move'?moving:posing)!==null)return;el.setPointerCapture(e.pointerId);start(e);e.preventDefault()});el.addEventListener('pointermove',e=>{move(e);e.preventDefault()});for(const ev of ['pointerup','pointercancel','lostpointercapture'])el.addEventListener(ev,end)
+}
+const keys=new Set();addEventListener('keydown',e=>{keys.add(e.code);if(e.code.startsWith('Arrow'))e.preventDefault()});addEventListener('keyup',e=>keys.delete(e.code));
+let W=0,H=0;function resize(){const r=c.getBoundingClientRect(),z=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;c.width=Math.round(W*z);c.height=Math.round(H*z);ctx.setTransform(z,0,0,z,0,0)}addEventListener('resize',resize);resize();
+function physics(dt){
+if(moving===null){input.move=Number(keys.has('ArrowRight')||keys.has('KeyD'))-Number(keys.has('ArrowLeft')||keys.has('KeyA'))}
+if(posing===null){const k=Number(keys.has('ArrowDown')||keys.has('KeyS'))-Number(keys.has('ArrowUp')||keys.has('KeyW'));if(k){input.speed=2.8*k;input.pose=clamp(input.pose+dt*input.speed);$('pk').style.top=(100*input.pose)+'%'}else input.speed=0}
+s.vx+=((d.rig==='joint'?4:3.4)*input.move-s.vx)*Math.min(1,dt*(s.ground?8:2));s.x+=s.vx*dt;
+if(s.ground){if(input.pose>.7){s.ready=true;s.charge=clamp(s.charge+dt*(.5+.5*d.crouch)/.95)}
+if(s.ready&&input.pose<.23&&input.speed<-.35&&s.charge>.06){const shape=(.8+.2*d.leg)*(.85+.15*d.extend)*(.85+.15*d.crouch),p=clamp(-input.speed/4);
+s.vy=Math.min(8.6,(1.35+3.7*s.charge+1.8*p)*shape*(d.rig==='joint'?1:1.05)/Math.sqrt(.85+.15*d.body));s.ground=false;s.y=.001;s.charge=0;s.ready=false;s.pulse=1}
+if(!s.ready&&input.pose<.45)s.charge=Math.max(0,s.charge-dt*1.4)}
+else{s.vy-=13*dt;s.y+=s.vy*dt;s.peak=Math.max(s.peak,s.y);if(s.y<=0){s.y=0;s.vy=0;s.ground=true;s.ready=false}}
+s.pulse=Math.max(0,s.pulse-dt*2.2)
+}
+function ellipse(x,y,rx,ry,color){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,TAU);ctx.fillStyle=color;ctx.fill()}
+let camera=0,clock=0;
+function draw(dt){camera+=(s.x-camera)*Math.min(1,dt*2.3);clock+=dt;const unit=Math.max(54,Math.min(100,W/9)),floor=H*.73,x=W*.48+(s.x-camera)*unit,y=floor-s.y*unit,g=ctx.createLinearGradient(0,0,0,H);
+g.addColorStop(0,'#2a484b');g.addColorStop(1,'#527567');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+for(let j=-2;j<10;j++)ellipse(j*290-(camera*unit*.1)%290,floor+112,180,166,'#40675e');
+ctx.strokeStyle='#d1eee04d';ctx.setLineDash([5,9]);for(let j=1;j<=3;j++){const yy=floor-j*unit;if(yy>10){ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(W,yy);ctx.stroke();ctx.fillStyle='#daffee';ctx.font='12px system-ui';ctx.fillText(j+'m',12,yy-8)}}ctx.setLineDash([]);
+ctx.fillStyle='#163432';ctx.fillRect(0,floor,W,H-floor);ctx.strokeStyle='#8fc5b0';ctx.beginPath();ctx.moveTo(0,floor);ctx.lineTo(W,floor);ctx.stroke();
+ellipse(x,floor+6,Math.max(9,38-s.y*6),7,'#071d1d80');
+const rx=40*d.body*(1+.16*input.pose),ry=45*d.body*(1-(s.ground?.35*input.pose*d.crouch:-.13*s.pulse));let cy=y-ry*(1.07-.48*input.pose);
+if(d.rig==='joint'){cy=y-ry*1.34-d.leg*18;ctx.strokeStyle='#b9ffe8';ctx.lineWidth=7*d.body;ctx.lineCap='round';for(const dir of [-1,1]){const hipX=x+dir*16,footX=x+dir*26*d.leg,footY=s.ground?floor-2:y+3,kx=x+dir*(30+10*input.pose),ky=(cy+ry*.6+footY)/2+8*input.pose;ctx.beginPath();ctx.moveTo(hipX,cy+ry*.6);ctx.lineTo(kx,ky);ctx.lineTo(footX,footY);ctx.stroke();ellipse(kx,ky,6,6,'#effff5')}}
+ctx.beginPath();for(let j=0;j<=60;j++){const a=TAU*j/60,wave=1+.015*Math.sin(a*5+clock*3),px=x+Math.cos(a)*rx*wave,py=cy+Math.sin(a)*ry*wave;if(j===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)}ctx.closePath();const gr=ctx.createRadialGradient(x-rx*.4,cy-ry*.5,2,x,cy,ry*1.7);gr.addColorStop(0,'#eefff0');gr.addColorStop(.5,'#b2f7dd');gr.addColorStop(1,'#52b4ab');ctx.fillStyle=gr;ctx.strokeStyle='#edfff5';ctx.lineWidth=2;ctx.fill();ctx.stroke();
+ellipse(x-rx*.2,cy-ry*.32,rx*.34,ry*.18,'#ffffff55');ellipse(x-10,cy-4,3.5,5,'#20534b');ellipse(x+10,cy-4,3.5,5,'#20534b');ctx.beginPath();ctx.strokeStyle='#20534b';ctx.arc(x,cy+6,6,.15,Math.PI-.15);ctx.stroke()
+}
+let last=performance.now(),count=0;function tick(t){const dt=clamp((t-last)/1000,0,.033);last=t;physics(dt);draw(dt);count+=dt;if(count>.09){count=0;$('height').textContent=s.peak.toFixed(2);$('speed').textContent=Math.hypot(s.vx,s.vy).toFixed(1);$('charge').textContent=Math.round(s.charge*100);$('status').textContent=s.ground?(s.charge>.05?'しゃがんで溜め中':'しゃがんで溜めよう'):(s.vy>0?'上昇中':'落下中')}requestAnimationFrame(tick)}requestAnimationFrame(tick);
+</script></body></html>
