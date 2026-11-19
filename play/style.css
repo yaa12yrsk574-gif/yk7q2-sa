@@ -12,3 +12,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#cfe3e8;touch-action:n
 #rail .tk.full{background:#d9572b}
 #rail .lab{display:block;font-size:10px;font-weight:800;color:#5f8fa3;margin-top:2px}
 #rail small{display:block;font-size:9.5px;font-weight:800;color:#5f8fa3;line-height:1.35}
+#pad{position:fixed;right:14px;bottom:calc(24px + env(safe-area-inset-bottom));width:min(260px,34vw);height:min(260px,34vw);min-width:200px;min-height:200px;background:rgba(255,255,255,.82);border:1.5px solid #9fc3d1;border-radius:18px;z-index:8;touch-action:none}
+#pad canvas{width:100%;height:100%;display:block;touch-action:none}
+#pad.editing{border-color:#d9572b;box-shadow:0 0 0 3px #d9572b55}
+#padEdit{position:absolute;right:6px;top:6px;padding:4px 8px;font-size:13px}
+#padRow{display:none;position:fixed;right:14px;bottom:calc(min(260px,34vw) + 34px + env(safe-area-inset-bottom));z-index:9;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:300px}
+#padRow.show{display:flex}
