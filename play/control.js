@@ -9,7 +9,8 @@ window.PlayControl = (() => {
     addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === ' ') c.up++; keys.delete(k); });
     addEventListener('blur', () => { keys.clear(); c.stick = null; c.rail.active = false; c.btnHeld = false; });
     // 画面：左半分＝スティック（指）、それ以外＝カメラを回す
-    canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); const x = e.clientX, y = e.clientY;
+    const cap = (el, id) => { try { el.setPointerCapture(id); } catch (_) {} }; /* つかめへん時も操作は続ける */
+    canvas.addEventListener('pointerdown', e => { cap(canvas, e.pointerId); const x = e.clientX, y = e.clientY;
       if (e.pointerType === 'touch') { c.touched = true; if (x < innerWidth * 0.5 && !c.stick) { c.stick = { id: e.pointerId, x0: x, y0: y, x, y }; return; } fingers.set(e.pointerId, { x, y });
         if (fingers.size === 2) { const [a, b] = [...fingers.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) }; } return; }
       drag = { id: e.pointerId, x, y }; });
@@ -23,7 +24,7 @@ window.PlayControl = (() => {
     canvas.addEventListener('wheel', e => { e.preventDefault(); c.orbit.zoom *= Math.exp(e.deltaY * 0.001); }, { passive: false });
     // 右のレール：位置＝コマ（上＝立ち・踏み切り、下＝しゃがみ）。空中で触る＝羽ばたき
     const tr = rail.querySelector('.tr'), at = e => { const r = tr.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)); };
-    rail.addEventListener('pointerdown', e => { e.preventDefault(); rail.setPointerCapture(e.pointerId); c.rail.id = e.pointerId; c.rail.active = true; c.rail.v = at(e); c.rail.tap = true; c.btnHeld = true; c.press++; });
+    rail.addEventListener('pointerdown', e => { e.preventDefault(); cap(rail, e.pointerId); c.rail.id = e.pointerId; c.rail.active = true; c.rail.v = at(e); c.rail.tap = true; c.btnHeld = true; c.press++; });
     rail.addEventListener('pointermove', e => { if (c.rail.active && e.pointerId === c.rail.id) c.rail.v = at(e); });
     const rend = e => { if (e.pointerId === c.rail.id) { c.rail.active = false; c.btnHeld = false; c.up++; } }; rail.addEventListener('pointerup', rend); rail.addEventListener('pointercancel', rend);
     // 毎フレーム読む：カメラから見た前後左右（fx＝右、fz＝前）。押した・離した は1回だけ
