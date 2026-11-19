@@ -3,7 +3,7 @@
 window.PlayBody = (() => {
   let S = null; const core = window.BoneCore.create(THREE, () => S, v => { S = v; }), { poseAt, boneGeom } = core;
   const clone = o => JSON.parse(JSON.stringify(o)), TPL = window.BoneTemplates, FR = 24;
-  const SLOTS = ['idle', 'walk', 'run', 'jump', 'flap'];
+  const SLOTS = ['idle', 'walk', 'run', 'jump', 'flap'], TAP_MAX = 1.9; /* 普段のジャンプの高さの上限（m）。これより上は腕（勝負ジャンプ）が要る */
   // 足元を地面、真ん中を原点に（狩り場と同じ置き方）
   function prep(d) { const D = clone(d); D.bones = D.bones.filter(b => b.pts && b.pts.length >= 2); let minY = 1e9, sx = 0, sz = 0, n = 0;
     for (const b of D.bones) for (const p of b.pts) { minY = Math.min(minY, p[1]); sx += p[0]; sz += p[2]; n++; }
@@ -36,22 +36,31 @@ window.PlayBody = (() => {
     if (h.st === 'ground') { if (mag > 0.05) h.yaw = turnTo(h.yaw, ty, p.turn * dt); h.v += Math.max(-p.brake * dt, Math.min(p.accel * dt, mag * p.top - h.v)); }
     else if (h.st === 'charge' || h.st === 'takeoff') { if (mag > 0.05) h.yaw = turnTo(h.yaw, ty, p.turn * 0.5 * dt); h.v *= Math.max(0, 1 - dt * 1.2); }
     else if (mag > 0.05) { h.yaw = turnTo(h.yaw, ty, (P.airTurn || 1.3) * dt); h.v += (mag * pr.top * 0.7 - h.v) * Math.min(1, dt * 1.2); }
-    // 踏み切り：作ったコマの重心の動き × 指でこすった速さ（弾き）× しゃがみで溜めた分（上限が上がる）
-    const lift = (sp, c) => { const m = M.jump, a = m.c[0], b = J.comTk, dx = (b[0] - a[0]) * B.size, dz = (b[2] - a[2]) * B.size, sy = Math.sin(h.yaw), cy = Math.cos(h.yaw), r2 = Math.min(J.rSpeed * sp, J.rCap * (0.85 + 0.3 * c)), k = J.r > 1e-4 ? r2 / J.r : 1;
-      h.x += dx * cy + dz * sy; h.z += -dx * sy + dz * cy; h.vy = J.vy * k; h.v = Math.max(h.v, (J.vh[1] || 0) * k); h.y += 0.001; h.st = 'jair'; h.airT = 0; h.from = 'jump'; h.rail = false; h.tair = 2 * h.vy / g; h.peak = h.y; h.y0 = h.y;
-      B.last = { c, sp, h: h.vy * h.vy / (2 * g), lim: J.rSpeed * sp > J.rCap * (0.85 + 0.3 * c) }; B.events.push('lift'); };
+    // 踏み切り：2段階。普段＝作った動きの素の高さ（上限 TAP_MAX）。勝負＝その素の高さに、弾く速さと溜めを掛ける（最大で高さ約1.7倍）
+    const kcap = Math.min(1, Math.sqrt(TAP_MAX / Math.max(0.01, J ? J.h : 1)));
+    const lift = (mode, sp, c) => { const m = M.jump, a = m.c[0], b = J.comTk, dx = (b[0] - a[0]) * B.size, dz = (b[2] - a[2]) * B.size, sy = Math.sin(h.yaw), cy = Math.cos(h.yaw);
+      const f = mode === 'tap' ? 1 : Math.min(1.3, 0.75 + 0.45 * sp) * (0.92 + 0.08 * c), k = kcap * f;
+      h.x += dx * cy + dz * sy; h.z += -dx * sy + dz * cy; h.vy = J.vy * k; h.v = Math.max(h.v, (J.vh[1] || 0) * k); h.y += 0.001; h.st = 'jair'; h.airT = 0; h.from = 'jump'; h.rail = false; h.auto = null; h.tair = 2 * h.vy / g; h.peak = h.y; h.y0 = h.y;
+      B.last = { mode, c, sp, f, h: h.vy * h.vy / (2 * g), base: J.h * kcap * kcap, capped: kcap < 1 }; B.events.push('lift'); };
+    // 普段：作ったコマをそのまま再生して跳ぶ（しゃがみ→踏み切り）
+    const autoJump = () => { h.st = 'charge'; h.auto = 'tap'; h.f = 0; h.c = 0; h.rail = false; };
+    // レール：触った所から下へ0.25以上（か一番下近く）までなぞったら勝負。そうならずに離したら普段のジャンプ
     const R = inp.rail;
-    if (R && J && (h.st === 'ground' || h.rail)) { const v = R.v;
-      if (h.st === 'ground' && R.active && v > 0.06) { h.st = 'charge'; h.rail = true; h.vmax = 0; h.c = 0; }
-      if (h.rail && h.st === 'charge') { h.vmax = Math.max(h.vmax, v); h.f = Math.min(1, v / 0.9) * J.hold; if (v >= 0.86) h.c = Math.min(1, h.c + dt / 0.6);
+    if (R && J && h.st === 'ground' && R.active && !h.pend) h.pend = { v0: R.v };
+    if (R && J && h.st === 'ground' && inp.railTap && !R.active && !h.pend) autoJump(); /* 一瞬で離した時も跳ぶ */
+    if (h.pend) { if (!R.active) { h.pend = null; if (h.st === 'ground') autoJump(); } else if (R.v - h.pend.v0 > 0.25 || R.v > 0.8) { h.pend = null; if (h.st === 'ground') { h.st = 'charge'; h.rail = true; h.vmax = 0; h.c = 0; h.auto = null; } } }
+    if (R && J && h.rail) { const v = R.v;
+      if (h.st === 'charge') { h.vmax = Math.max(h.vmax, v); h.f = Math.min(1, v / 0.9) * J.hold; if (v >= 0.86) h.c = Math.min(1, h.c + dt / 0.6);
         if (h.vmax >= 0.82 && v < h.vmax - 0.05) { h.st = 'takeoff'; h.t0 = 0; h.v0 = h.vmax; } else if (!R.active) { h.st = 'ground'; h.rail = false; h.c = 0; } }
-      else if (h.rail && h.st === 'takeoff') { h.t0 += dt; const u = Math.max(0, Math.min(1, (h.v0 - v) / Math.max(0.3, h.v0 - 0.1))); h.f = J.hold + u * (J.tk - J.hold);
-        if (u >= 1 || (!R.active && u > 0.5)) lift(Math.max(0.3, Math.min(1.7, ((J.tk - J.hold) * u / FR) / Math.max(0.03, h.t0))), h.c); else if (!R.active) { h.st = 'ground'; h.rail = false; h.c = 0; } } }
+      else if (h.st === 'takeoff') { h.t0 += dt; const u = Math.max(0, Math.min(1, (h.v0 - v) / Math.max(0.3, h.v0 - 0.1))); h.f = J.hold + u * (J.tk - J.hold);
+        if (u >= 1 || (!R.active && u > 0.5)) lift('ps', Math.max(0.3, Math.min(1.7, ((J.tk - J.hold) * u / FR) / Math.max(0.03, h.t0))), h.c); else if (!R.active) { h.st = 'ground'; h.rail = false; h.c = 0; } } }
     const keyPress = inp.press && !inp.railTap, startFlap = () => { h.st = 'flap'; h.f = 0; h.flapped = false; };
     if (!h.rail) {
-      if (h.st === 'ground' && keyPress) { if (J) { h.st = 'charge'; h.f = 0; h.c = 0; } else { h.vy = P.jumpV || 6.4; h.y += 0.001; h.st = 'air'; h.from = 'hop'; h.peak = h.y; h.y0 = h.y; } }
-      if (h.st === 'charge') { h.f = Math.min(J.hold, h.f + dt * FR); if (h.f >= J.hold) h.c = Math.min(1, h.c + dt / 0.6); if (inp.up || !inp.held) { h.st = 'takeoff'; h.f = Math.max(h.f, J.hold); } }
-      else if (h.st === 'takeoff') { h.f = Math.min(J.tk, h.f + dt * FR); if (h.f >= J.tk) lift(1, h.c); } }
+      // キー：短く押す＝普段のジャンプ。しゃがみ切っても押し続けた（0.12秒）＝勝負（弾きは並の速さ）
+      if (h.st === 'ground' && keyPress && !h.pend) { if (J) { h.st = 'charge'; h.f = 0; h.c = 0; h.auto = 'key'; h.hold = 0; } else { h.vy = P.jumpV || 6.4; h.y += 0.001; h.st = 'air'; h.from = 'hop'; h.peak = h.y; h.y0 = h.y; } }
+      if (h.st === 'charge' && h.auto) { h.f = Math.min(J.hold, h.f + dt * FR); if (h.auto === 'key') { if (h.f >= J.hold && inp.held) { h.hold += dt; if (h.hold > 0.12) h.c = Math.min(1, h.c + dt / 0.6); } if (!inp.held || inp.up) h.rel = true; }
+        if (h.f >= J.hold && (h.auto === 'tap' || h.rel)) { h.st = 'takeoff'; h.ps = h.auto === 'key' && h.hold > 0.12; h.rel = false; } }
+      else if (h.st === 'takeoff') { h.f = Math.min(J.tk, h.f + dt * FR); if (h.f >= J.tk) lift(h.ps ? 'ps' : 'tap', 1, h.c); } }
     if (h.st === 'jair') { h.airT += dt; h.f = J.tk + Math.min(1, h.airT / Math.max(0.05, h.tair)) * (M.jump.len - J.tk); if (inp.press && Fl) startFlap(); else if (h.airT >= h.tair) h.st = 'air'; }
     else if (h.st === 'air') { if (inp.press && Fl) startFlap(); }
     else if (h.st === 'flap') { const prev = h.f; h.f = Math.min(Fl.len, h.f + dt * FR); if (!h.flapped && prev < Fl.down && h.f >= Fl.down) { h.vy = Math.max(h.vy, 0) * 0.35 + (P.flapV || 4.6) * Fl.Fx.r; h.flapped = true; B.events.push('flap'); }

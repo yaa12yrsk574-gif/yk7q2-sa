@@ -35,13 +35,13 @@
       cam.position.set(camT.x + Math.sin(camYaw) * cp * camDist, camT.y + Math.sin(camPitch) * camDist, camT.z + Math.cos(camYaw) * cp * camDist); cam.lookAt(camT);
       // 表示：溜め・前のジャンプ
       const h = B.h, rows = []; if (h.st === 'charge' || h.st === 'takeoff') rows.push('溜め ' + Math.round(h.c * 100) + '%');
-      if (shownLast && shownLast.sp != null) rows.push('前のジャンプ：溜め ' + Math.round(shownLast.c * 100) + '%・弾き ×' + shownLast.sp.toFixed(2) + '・上がった高さ ' + Math.max(0, shownLast.rise).toFixed(2) + 'm' + (shownLast.lim ? '（溜めの上限）' : ''));
+      if (shownLast && shownLast.mode) rows.push(shownLast.mode === 'tap' ? '普段ジャンプ：' + Math.max(0, shownLast.rise).toFixed(2) + 'm' + (shownLast.capped ? '（普段はここまで）' : '') : '勝負ジャンプ：弾き ×' + shownLast.sp.toFixed(2) + '・溜め ' + Math.round(shownLast.c * 100) + '% → ' + Math.max(0, shownLast.rise).toFixed(2) + 'm（素は ' + shownLast.base.toFixed(2) + 'm）');
       info.innerHTML = rows.map(t => '<div>' + t + '</div>').join(''); info.style.display = rows.length ? 'block' : 'none';
       const J = B.M.jump && B.M.jump.J, kv = r.rail.active ? r.rail.v : (J && h.st === 'charge' ? h.f / Math.max(1, J.hold) * 0.9 : J && h.st === 'takeoff' ? 0.9 * (1 - (h.f - J.hold) / Math.max(1, J.tk - J.hold)) : 0); knob.style.top = (kv * 100) + '%'; knob.classList.toggle('full', h.c >= 1 && h.st === 'charge'); }
     for (const t of tags) { const p = proj(new THREE.Vector3(t.b.x, t.b.top + 0.25, t.b.z1)); t.e.style.display = p.z < 1 ? 'block' : 'none'; t.e.style.transform = 'translate(' + (p.x - 24) + 'px,' + (p.y - 12) + 'px)'; }
     renderer.render(scene, cam); requestAnimationFrame(frame); }
   pickFirst(); requestAnimationFrame(frame);
-  msg(matchMedia('(pointer: coarse)').matches ? '左をなぞって移動・右のレールを下で止めて溜め→上へ弾くとジャンプ' : 'WASDで移動・右のレール（またはSpace長押し→離す）でジャンプ・ドラッグでカメラ');
+  msg(matchMedia('(pointer: coarse)').matches ? '左をなぞって移動・レールをちょんと触るとジャンプ・下まで下ろして溜め→弾くと勝負ジャンプ' : 'WASDで移動・Spaceでジャンプ（長押し→離すと勝負ジャンプ）・ドラッグでカメラ');
   // 工房から戻った時：作品を読み直す（形や動きが変わってるかも）
   window.__play = { refresh() { const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, debug: () => ({ raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
 })();
