@@ -2,10 +2,11 @@
 
 
 
-const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'); fG.src = 'hunting.html?v=de603da30164'; let toolLoaded = false;
+const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'), fP = document.getElementById('fPlay'); let playLoaded = false; fG.src = 'hunting.html?v=de603da30164'; let toolLoaded = false;
 // 狩り場はiframe。子だけのblurでは、画面分割やウィンドウ切替で取り逃す場合がある
 window.__gameOn = true;
 window.__openTool = () => document.querySelector('#tabs button[data-t="tool"]').click();
+window.__openPlay = () => document.querySelector('#tabs button[data-t="play"]').click(); /* 草原：作った子で歩き回る */
 function stopGameMovement() { try { fG.contentWindow.__clearMovementInput?.(); } catch (_) {} }
 addEventListener('blur', stopGameMovement);
 addEventListener('focus', stopGameMovement);
@@ -16,11 +17,12 @@ function leaveAsk(go) { let d = document.getElementById('leaveDlg'); if (!d) { d
     d.innerHTML = '<div style="background:#faf7f1;border-radius:16px;padding:18px 18px 14px;max-width:360px;width:100%;box-shadow:0 8px 30px #0004;font-weight:800;color:#2b2a27"><div style="font-size:17px;margin-bottom:6px">まだ保存してへんで</div><div style="font-size:13px;color:#6b6457;margin-bottom:14px;line-height:1.5">保存せんと、狩り場の相棒は前の形・動きのまま。</div><div style="display:flex;flex-direction:column;gap:8px"><button data-a="save" style="font:inherit;font-size:15px;padding:11px;border-radius:11px;border:0;background:#d9572b;color:#fff">保存して戻る</button><button data-a="go" style="font:inherit;font-size:14px;padding:10px;border-radius:11px;border:1.5px solid #cfc7b8;background:#fff;color:#2b2a27">保存せずに戻る</button><button data-a="stay" style="font:inherit;font-size:14px;padding:10px;border-radius:11px;border:0;background:transparent;color:#6b6457">工房に残る</button></div></div>';
     document.body.appendChild(d); }
   d.style.display = 'flex'; d.querySelectorAll('button').forEach(x => x.onclick = () => { d.style.display = 'none'; const a = x.dataset.a; if (a === 'save') { try { fT.contentWindow.__saveWork(); } catch (_) {} go(); } else if (a === 'go') go(); }); }
-document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { if (b.dataset.t === 'game' && fT.classList.contains('on')) { let un = false; try { un = !!(fT.contentWindow.__unsaved && fT.contentWindow.__unsaved()); } catch (_) {} if (un) { leaveAsk(() => switchTab(b)); return; } } switchTab(b); });
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { if (b.dataset.t !== 'tool' && fT.classList.contains('on')) { let un = false; try { un = !!(fT.contentWindow.__unsaved && fT.contentWindow.__unsaved()); } catch (_) {} if (un) { leaveAsk(() => switchTab(b)); return; } } switchTab(b); });
 function switchTab(b) { const fromTool = fT.classList.contains('on'); stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
-  fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
-  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=757c72d35c21'; }
-  if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); if (fromTool) fG.contentWindow.__field.back(); fG.contentWindow.focus(); } catch (_) {} } else { try { fT.contentWindow.focus(); } catch (_) {} } }
+  fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); fP.classList.toggle('on', t === 'play'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
+  if (t === 'play') { if (!playLoaded) { playLoaded = true; fP.src = 'play.html?v=60402bfe9b5a'; } else { try { fP.contentWindow.__play.refresh(); } catch (_) {} } setTimeout(() => { try { fP.contentWindow.focus(); } catch (_) {} }, 50); }
+  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=bfbcd5c89ea7'; }
+  if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); if (fromTool) fG.contentWindow.__field.back(); fG.contentWindow.focus(); } catch (_) {} } else if (t === 'tool') { try { fT.contentWindow.focus(); } catch (_) {} } }
 
 // <bone_sync>
 // ---- 工房・狩り場の作品をクラウド（このページのdb）と同期する ----
@@ -32,4 +34,4 @@ window.__boneOuter = true;
 boneCloud({ use: n => { try { return window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null); } catch (_) { return Promise.resolve(null); } },
   status: (t, warn) => { const e = document.getElementById('cloudSt'); e.textContent = t.replace('（手元には残ってる）', '').replace('この端末に保存', ''); e.style.color = warn ? '#ffb199' : ''; },
   onWorks: () => { try { fG.contentWindow.__field.refresh(); } catch (_) {} },
-  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=757c72d35c21'; } });
+  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=bfbcd5c89ea7'; } });

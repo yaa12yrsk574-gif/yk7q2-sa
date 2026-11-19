@@ -521,6 +521,7 @@ function switchAct(i) { if (TRY) tryStop(); if (i === S.actI || !S.acts[i]) retu
 function addAct(slot, base) { pushUndo(); const names = S.acts.map(a => a.name); let name = base ? base.name : SLOTS[slot].name, n = 2; const root = name; while (names.includes(name)) name = root + String.fromCharCode(64 + n++);
   S.acts.push({ name, slot, anim: base ? clone(base.anim) : newAnim(slot) }); switchAct(S.acts.length - 1); toast('「' + name + '」を作った'); }
 document.getElementById('actSel').addEventListener('change', e => { const v = e.target.value; if (v.startsWith('a:')) switchAct(+v.slice(2)); else addAct(v.slice(2)); $('actSel').dataset.sig = ''; drawActSel(); });
+document.getElementById('fieldBtn').onclick = () => { try { parent.__openPlay ? parent.__openPlay() : (location.href = 'play.html'); } catch (_) { location.href = 'play.html'; } };
 document.getElementById('tryBtn').onclick = () => { if (TRY) tryStop(); else tryStart(); };
 document.getElementById('tlMoreBtn').onclick = () => { const on = tl.classList.toggle('more'); document.body.classList.toggle('tlmore', on); try { localStorage.setItem('yuya_tl_more', on ? '1' : ''); } catch (_) {} requestAnimationFrame(() => { tlLayout(); drawTL(); viewShift(); }); };
 try { if (localStorage.getItem('yuya_tl_more')) { document.getElementById('tl').classList.add('more'); document.body.classList.add('tlmore'); } } catch (_) {}
