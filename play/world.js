@@ -30,8 +30,21 @@ window.PlayWorld = (() => {
     function tick(dt) { for (const c of vineG.children) if (c.userData.fall) { c.rotation.x += dt * 2.5; c.position.y -= dt * 1.5; c.scale.multiplyScalar(1 - dt * 0.8); if (c.position.y < -1) { c.visible = false; c.userData.fall = 0; } }
       if (vineG.userData.shake > 0) { vineG.userData.shake -= dt; vineG.position.x = Math.sin(vineG.userData.shake * 60) * 0.04 * vineG.userData.shake; }
       for (const f of fruits) if (f.st === 'gone') { f.t -= dt; if (f.t <= 0) { if (f.splat) { scene.remove(f.splat); f.splat = null; } f.st = 'ground'; f.m.visible = true; f.m.position.set(f.home[0], 0.17, f.home[1]); } } }
+    // ---- ぶら下がれるツタ：木の枝から1本垂れてる。ハサミで掴むとぶら下がって揺れる。奥の 1.4m の岩へ飛び移れる ----
+    const swing = { pivot: [9, 3.5, -6.3], L: 2.35, dir: [0, 0, -1] }; /* dir＝揺れる向き（岩の方） */
+    { const wood = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, flatShading: true }), leaf = new THREE.MeshStandardMaterial({ color: 0x5f9a48, flatShading: true });
+      const tk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 4.2, 7), wood); tk.position.set(11.6, 2.1, -6.3); scene.add(tk);
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 2.8, 6), wood); br.rotation.z = Math.PI / 2 + 0.08; br.position.set(10.25, 3.55, -6.3); scene.add(br);
+      const cr = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 0), leaf); cr.position.set(12.4, 5.1, -6.6); cr.scale.set(1.0, 0.75, 0.9); /* 葉っぱはツタの真上からずらす（揺れてる時に隠さない） */ scene.add(cr); }
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 0.9, flatShading: true }), rope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1, 6), ropeMat); scene.add(rope);
+    const tipM = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), ropeMat); scene.add(tipM); /* 先っぽの葉っぱの玉（掴む目印） */
+    swing.rest = () => [swing.pivot[0], swing.pivot[1] - swing.L, swing.pivot[2]];
+    swing.setEnd = (p) => { const a = new THREE.Vector3(...swing.pivot), b = new THREE.Vector3(...p), d = b.clone().sub(a), l = d.length(); rope.scale.set(1, l, 1); rope.position.copy(a).add(b).multiplyScalar(0.5); rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); tipM.position.copy(b); };
+    swing.setEnd(swing.rest());
+    // ツタ（支点→先っぽ）に一番近い点と、その距離
+    swing.near = (q) => { const P0 = swing.pivot, P1 = swing.rest(), v = [P1[0] - P0[0], P1[1] - P0[1], P1[2] - P0[2]], w = [q[0] - P0[0], q[1] - P0[1], q[2] - P0[2]], L2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2], t = Math.max(0.25, Math.min(1, (w[0] * v[0] + w[1] * v[1] + w[2] * v[2]) / L2)), c = [P0[0] + v[0] * t, P0[1] + v[1] * t, P0[2] + v[2] * t]; return { p: c, d: Math.hypot(q[0] - c[0], q[1] - c[1], q[2] - c[2]), L: swing.L * t }; };
     // ある場所の地面の高さ（その高さ y より下にある一番高い面）
     function groundAt(x, z, y) { let g = 0; for (const b of boxes) if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.top <= y && b.top > g) g = b.top; return g; }
-    return { boxes, groundAt, strike, fruitNear, crush, drop, tick, fruits }; }
+    return { boxes, groundAt, strike, fruitNear, crush, drop, tick, fruits, swing }; }
   return { create };
 })();

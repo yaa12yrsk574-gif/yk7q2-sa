@@ -12,6 +12,19 @@
   // ---- 序盤：ペンギン（プレイヤー）とプルプル。phase＝small（0.4m・自分で動く）→ big（0.7m・乗れる）。乗ってる間だけプルプルを操作 ----
   const ST = window.PlayStory, pen = ST.penguin(scene, world), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
   let phase = 'small', riding = false, growT = -1, growFrom = 1;
+  // ---- ハサミ（2本指でつまむ）とツタ ----
+  let hang = null, grip = 0; const SW = world.swing, aimM = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false })); aimM.renderOrder = 9; aimM.visible = false; scene.add(aimM);
+  const gripOf = pc => pc.pmax > 0.15 ? Math.max(0, Math.min(1, (pc.pmax - pc.open) / pc.pmax)) : 0; /* 開いてから閉じた深さ＝握る力 */
+  // 狙い：2本指の真ん中。左右＝体の向きから±35°、上下＝背の高さ±0.6m。前へ（体の半径＋0.35m）
+  function aimAt(pc) { const h = B.h, a = h.yaw - (pc.mx - 0.5) * 2 * 0.6, reach = B.radius + 0.35; return [h.x + Math.sin(a) * reach, h.y + B.Hm * 0.85 + (0.5 - pc.my) * 2 * 0.6, h.z + Math.cos(a) * reach]; }
+  const SG = 13, yawDir = Math.atan2(SW.dir[0], SW.dir[2]);
+  function startHang(n) { const h = B.h, va = h.v * (Math.sin(h.yaw) * SW.dir[0] + Math.cos(h.yaw) * SW.dir[2]); hang = { L: Math.max(0.6, n.L), th: 0, w: va / Math.max(0.6, n.L) }; held = null; msg('ツタを掴んだ！ 左で前後に揺らして、指を開いたら離れる'); }
+  // ぶら下がり：振り子。左の前後で漕ぐ。指を開く（力30%未満）か離したら、その勢いで飛ぶ
+  function hangStep(dt, mx, mz, pc) { const H = hang, h = B.h, s = mx * SW.dir[0] + mz * SW.dir[2];
+    const pump = s * H.w > 0 ? s * 7 : s * 1.5; /* 揺れてる向きに押した時だけよく効く（ブランコの漕ぎ） */ H.w += (-(SG / H.L) * Math.sin(H.th) - 0.12 * H.w + pump / H.L) * dt; H.th = Math.max(-1.45, Math.min(1.45, H.th + H.w * dt));
+    const gp = [SW.pivot[0] + SW.dir[0] * Math.sin(H.th) * H.L, SW.pivot[1] - Math.cos(H.th) * H.L, SW.pivot[2] + SW.dir[2] * Math.sin(H.th) * H.L]; SW.setEnd(gp);
+    h.yaw = yawDir; h.x = gp[0] - Math.sin(yawDir) * B.radius * 0.5; h.z = gp[2] - Math.cos(yawDir) * B.radius * 0.5; h.y = gp[1] - B.Hm * 0.92; h.st = 'grab'; h.v = 0; h.vy = 0;
+    if (!pc.active || gripOf(pc) < 0.3) { const vt = H.w * H.L, hz = vt * Math.cos(H.th); h.st = 'air'; h.vy = vt * Math.sin(H.th) + 1.2; h.v = Math.abs(hz); h.yaw = hz >= 0 ? yawDir : yawDir + Math.PI; h.peak = h.y; h.y0 = h.y; h.from = null; h.airT = 0; h.grip = 0; hang = null; SW.setEnd(SW.rest()); B.events.push('lift'); msg(''); } }
   const hCache = {};
   // 作品の背の高さ（大きさ1の時、m）→ 狙いの背の高さになる大きさ
   function heightOf(w) { const k = w.id + ':' + (w.t || 0); if (hCache[k]) return hCache[k]; const B1 = window.PlayBody.make(Object.assign({}, w, { __size: 1 })); let top = 0.05;
@@ -19,7 +32,7 @@
   function useWork(w, keepPos) { const old = B && B.h; try { const H = heightOf(w); B = window.PlayBody.make(Object.assign({}, w, { __size: ST.SIZE[phase] / H })); B.Hm = ST.SIZE[phase]; } catch (e) { console.error(e); msg('この作品は読み込めへんかった'); return; }
     if (keepPos && old) Object.assign(B.h, { x: old.x, z: old.z, y: old.y, yaw: old.yaw }); LS.set('yuya_play_mate', w.id);
     document.getElementById('mateBtn').textContent = '相棒：' + (w.name || '名前なし') + ' ▸'; camDist = camDist || 5.6; useSkin(skinKind); held = null;
-    pad.use(w.id, ['jump', 'swing', 'grab'].filter(m => m === 'jump' ? B.M.jump : B.M.attack)); /* 跳ぶ・振る・掴む（攻撃の動きがある子だけ） */
+    pad.use(w.id, ['jump', 'swing'].filter(m => m === 'jump' ? B.M.jump : B.M.attack), !!B.M.attack); /* 1本指＝跳ぶ・振る、2本指でつまむ＝ハサミ（攻撃の動きがある子だけ） */ hang = null;
     const miss = ['walk', 'run', 'jump'].filter(s => !B.M[s]); if (miss.length) msg('この子はまだ「' + miss.map(s => ({ walk: '歩く', run: '走る', jump: '跳ぶ' })[s]).join('・') + '」がない（工房で作ってな）'); }
   function useSkin(k) { if (!window.PlaySkins[k]) k = 'pulu'; skinKind = k; LS.set('yuya_play_skin2', k); if (skin) { scene.remove(skin.g); skin.dispose(); } skin = window.PlaySkins[k](B); scene.add(skin.g); document.getElementById('skinBtn').textContent = '見た目：' + window.PlaySkins.list.find(x => x[0] === k)[1]; }
   function pickFirst() { const l = works(), id = LS.get('yuya_play_mate'); useWork(l.find(w => w.id === id) || l.sort((a, b) => (b.t || 0) - (a.t || 0))[0]); placeStart(); }
@@ -54,7 +67,11 @@
     if (B) { const r = ctl.read(); camYaw -= r.orbit.dx * 0.006; camPitch = Math.max(0.05, Math.min(1.2, camPitch + r.orbit.dy * 0.004)); camDist = Math.max(2, Math.min(30, camDist * r.orbit.zoom));
       const sy = Math.sin(camYaw), cy = Math.cos(camYaw), mx = -sy * r.fz + cy * r.fx, mz = -cy * r.fz - sy * r.fx; /* カメラから見た前後左右 → 世界の向き */
       const a = pad.read(), air = B.h.st === 'jair' || B.h.st === 'air' || B.h.st === 'flap';
-      if (riding) B.step(dt, { mx, mz, walk: r.walk, press: r.press || (air && a.airTap), up: r.up, held: r.held, act: a, keySwing: r.keySwing, keyGrab: r.keyGrab }, world);
+      const pc = a.pinch || {}; grip = pc.active ? gripOf(pc) : 0;
+      if (riding && hang) hangStep(dt, mx, mz, pc);
+      else if (riding) { const act = pc.active ? { move: 'grab', active: true, p: pc.open, pmax: pc.pmax, down: pc.down } : a; /* つまんでる間は、ハサミのコマを指の開きで動かす */
+        B.step(dt, { mx, mz, walk: r.walk, press: r.press || (air && a.airTap && !pc.active), up: r.up, held: r.held, act, keySwing: r.keySwing, keyGrab: r.keyGrab }, world);
+        if (pc.active && grip >= 0.45 && SW) { const q = aimAt(pc), n = SW.near(q); if (n.d < 0.4) startHang(n); } }
       else { pen.step(dt, mx, mz, r.walk, world); /* プレイヤーはペンギン。プルプルは自分で動く */
         const inp = brain.tick(B, pen, dt, { riding, squash: k => skin.squash && skin.squash(k), push: (dx, dz) => pen.nudge(dx, dz, world), lift: (k, tr, raise) => { skin.strain && skin.strain(k, tr); pen.raise = raise || 0; } }); /* 言葉では説明しない */
         if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
@@ -63,10 +80,11 @@
       // 振る・掴む：口（頭の先）のまわりで当たり・掴みを見る
       const head = B.headAt(v);
       if (riding && ev && typeof ev.strike === 'number') { /* ev が 'lift' みたいな文字の時、'lift'.strike は文字列の古い関数になってまう → 数字の時だけ */ const res = world.strike(head, ev.strike, 0.5 + B.radius); feel = res === 'cut' ? '振る：×' + ev.strike.toFixed(2) + ' → 切れた！' : res === 'weak' ? '振る：×' + ev.strike.toFixed(2) + ' → ペチッ（もっと速く振り抜く）' : '振る：×' + ev.strike.toFixed(2); feelT = 2.5; if (res === 'cut') msg('ツタが切れた！'); }
-      if (riding && B.h.st === 'grab') { const q = B.h.grip; if (!held) { const f = world.fruitNear(head, 0.4 + 0.2 * B.size, 1.0 * B.size); if (f && q >= 0.45) { if (q > 0.78) { world.crush(f); feel = '掴む：力 ' + Math.round(q * 100) + '% → 潰れた…'; feelT = 2.5; } else { held = f; f.st = 'held'; feel = '掴んだ！（力 ' + Math.round(q * 100) + '%）'; feelT = 2; } } }
+      const aimP = riding && pc.active ? aimAt(pc) : null; aimM.visible = !!aimP; if (aimP) { aimM.position.set(...aimP); aimM.quaternion.copy(cam.quaternion); aimM.material.color.set(grip >= 0.78 ? 0xe0533a : grip >= 0.45 ? 0x3d8a4f : 0xffffff); aimM.scale.setScalar(0.6 + pc.open * 1.2); }
+      if (riding && !hang && B.h.st === 'grab') { const q = B.h.grip; if (!held) { const f = world.fruitNear(aimP || head, 0.4 + 0.2 * B.size, 1.0 * B.size); if (f && q >= 0.45) { if (q > 0.78) { world.crush(f); feel = '掴む：力 ' + Math.round(q * 100) + '% → 潰れた…'; feelT = 2.5; } else { held = f; f.st = 'held'; feel = '掴んだ！（力 ' + Math.round(q * 100) + '%）'; feelT = 2; } } }
         else if (q > 0.78) { world.crush(held); held = null; feel = '力入れすぎて潰れた…'; feelT = 2.5; } else if (q < 0.3) { world.drop(held); held = null; } }
       else if (held) { world.drop(held); held = null; }
-      if (held) held.m.position.set(head[0], head[1] - 0.05, head[2]);
+      if (held) { const hp = aimP || head; held.m.position.set(hp[0], hp[1] - 0.05, hp[2]); }
       let gm = 1; if (growT >= 0) { growT += dt; const u = Math.min(1, growT / 1.4); gm = growFrom + (1 - growFrom) * (1 - Math.pow(1 - u, 3)) + Math.sin(growT * 18) * 0.06 * (1 - u); if (u >= 1) { growT = -1; brain.S.st = 'follow'; skin.squash && skin.squash(2.4); msg('乗せられる体になった！ 近くで「乗る」（Q）'); } }
       const tilt = brain.S.tilt; skin.update(dt, v, ev); skin.g.position.set(v.x, v.y + B.radius * 0.6 * Math.max(0, tilt), v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
       // ペンギン：乗ってる時はプルプルの背中に座る
