@@ -57,7 +57,7 @@
   new MutationObserver(placeBadge).observe(btn, { attributes: true, attributeFilter: ['style'] });
   badge.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); });
   badge.addEventListener('click', e => { e.stopPropagation(); rescue(); });
-  const ART = 'https://claude.ai/artifact/TgUYw7r6vbmovyCYbEt4cC';
+  const ART = 'https://claude.ai/artifact/FjSSaH6owZpfPRdYWtYktu';
   // 届いてへん💢を見せる：コピーしてくー君のチャットに貼る／claude.ai版へ／消す
   async function rescue() {
     if (document.getElementById('__stressRescue')) return; const list = await Q.all(); if (!list.length) { refreshBadge(); return; }
