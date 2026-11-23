@@ -10,7 +10,7 @@
   function works() { const l = (window.BoneStorage.loadWorks() || []).filter(w => w && w.data && w.data.bones && w.data.bones.length); if (!l.length) l.push({ id: 'tpl', name: 'ツノトカゲ（お手本）', data: window.BoneTemplates.data('tokage') }); return l; }
   let held = null, B = null, skin = null, skinKind = LS.get('yuya_play_skin2') || 'pulu', camYaw = 0, camPitch = 0.42, camDist = 0, camT = new THREE.Vector3();
   // ---- 序盤：ペンギン（プレイヤー）とプルプル。phase＝small（0.4m・自分で動く）→ big（0.7m・乗れる）。乗ってる間だけプルプルを操作 ----
-  const ST = window.PlayStory, pen = ST.penguin(scene), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
+  const ST = window.PlayStory, pen = ST.penguin(scene, world), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
   let phase = 'small', riding = false, growT = -1, growFrom = 1;
   const hCache = {};
   // 作品の背の高さ（大きさ1の時、m）→ 狙いの背の高さになる大きさ
@@ -56,7 +56,7 @@
       const a = pad.read(), air = B.h.st === 'jair' || B.h.st === 'air' || B.h.st === 'flap';
       if (riding) B.step(dt, { mx, mz, walk: r.walk, press: r.press || (air && a.airTap), up: r.up, held: r.held, act: a, keySwing: r.keySwing, keyGrab: r.keyGrab }, world);
       else { pen.step(dt, mx, mz, r.walk, world); /* プレイヤーはペンギン。プルプルは自分で動く */
-        const inp = brain.tick(B, pen, dt, { riding, onWish: () => msg('プルプルは、一緒に登りたいみたい'), squash: k => skin.squash && skin.squash(k) });
+        const inp = brain.tick(B, pen, dt, { riding, squash: k => skin.squash && skin.squash(k), push: (dx, dz) => pen.nudge(dx, dz, world), lift: () => pen.bump() }); /* 言葉では説明しない */
         if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
       world.tick(dt);
       const v = B.view(); skin.setPose(v); let ev = null; while (B.events.length) { const e = B.events.shift(); ev = e; if (e && e.land != null) shownLast = Object.assign({}, B.last || {}, { rise: e.rise }); }
@@ -67,12 +67,12 @@
         else if (q > 0.78) { world.crush(held); held = null; feel = '力入れすぎて潰れた…'; feelT = 2.5; } else if (q < 0.3) { world.drop(held); held = null; } }
       else if (held) { world.drop(held); held = null; }
       if (held) held.m.position.set(head[0], head[1] - 0.05, head[2]);
-      let gm = 1; if (growT >= 0) { growT += dt; const u = Math.min(1, growT / 1.4); gm = growFrom + (1 - growFrom) * (1 - Math.pow(1 - u, 3)) + Math.sin(growT * 18) * 0.06 * (1 - u); if (u >= 1) { growT = -1; brain.S.st = 'follow'; brain.S.emo = '♡'; brain.S.emoT = 1.8; msg('乗せられる体になった！ 近くで「乗る」（Q）'); } }
-      const tilt = brain.S.tilt; skin.update(dt, v, ev); skin.g.position.set(v.x, v.y + B.radius * 0.6 * tilt, v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
+      let gm = 1; if (growT >= 0) { growT += dt; const u = Math.min(1, growT / 1.4); gm = growFrom + (1 - growFrom) * (1 - Math.pow(1 - u, 3)) + Math.sin(growT * 18) * 0.06 * (1 - u); if (u >= 1) { growT = -1; brain.S.st = 'follow'; skin.squash && skin.squash(2.4); msg('乗せられる体になった！ 近くで「乗る」（Q）'); } }
+      const tilt = brain.S.tilt; skin.update(dt, v, ev); skin.g.position.set(v.x, v.y + B.radius * 0.6 * Math.max(0, tilt), v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
       // ペンギン：乗ってる時はプルプルの背中に座る
       if (riding) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06; /* 背中（胴の骨の高さ）に座る */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } pen.place();
       // 吹き出し：プルプルの頭の上
-      bub.show(riding ? null : brain.S.st === 'wish' ? 'wish' : brain.S.emo); bub.tick(dt); { const p = proj(new THREE.Vector3(v.x, v.y + B.Hm * gm + 0.18, v.z)); bub.place(p.x, p.y, p.z < 1); }
+      bub.show(null); /* 吹き出しは出さない（動きで伝える） */ bub.tick(dt); { const p = proj(new THREE.Vector3(v.x, v.y + B.Hm * gm + 0.18, v.z)); bub.place(p.x, p.y, p.z < 1); }
       growBtn.style.display = phase === 'small' && brain.S.wished ? 'block' : 'none';
       rideBtn.style.display = (riding ? canDrop() : canRide()) ? 'block' : 'none'; rideBtn.textContent = riding ? '⤵ 降りる' : '🫧 乗る';
       // カメラ：後ろからついていく（歩いてる間はペンギン、乗ったらプルプル）
