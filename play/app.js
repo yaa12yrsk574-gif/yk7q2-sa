@@ -23,7 +23,7 @@
     const miss = ['walk', 'run', 'jump'].filter(s => !B.M[s]); if (miss.length) msg('この子はまだ「' + miss.map(s => ({ walk: '歩く', run: '走る', jump: '跳ぶ' })[s]).join('・') + '」がない（工房で作ってな）'); }
   function useSkin(k) { if (!window.PlaySkins[k]) k = 'pulu'; skinKind = k; LS.set('yuya_play_skin2', k); if (skin) { scene.remove(skin.g); skin.dispose(); } skin = window.PlaySkins[k](B); scene.add(skin.g); document.getElementById('skinBtn').textContent = '見た目：' + window.PlaySkins.list.find(x => x[0] === k)[1]; }
   function pickFirst() { const l = works(), id = LS.get('yuya_play_mate'); useWork(l.find(w => w.id === id) || l.sort((a, b) => (b.t || 0) - (a.t || 0))[0]); placeStart(); }
-  function placeStart() { Object.assign(B.h, { x: -0.5, z: 3, y: 0, yaw: Math.PI, v: 0, vy: 0, st: 'ground' }); Object.assign(pen, { x: 0.5, z: 3.2, y: 0, yaw: Math.PI, v: 0, vy: 0, seated: false }); camYaw = 0; camT.set(0, 0.5, 3); }
+  function placeStart() { Object.assign(B.h, { x: -0.5, z: 3, y: 0, yaw: Math.PI, v: 0, vy: 0, st: 'ground' }); Object.assign(pen, { x: 0.5, z: 3.2, y: 0, yaw: Math.PI, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = 0; camT.set(0, 0.5, 3); }
   // 乗る／降りる（0.7m になってから）。乗ったら操作がプルプルに移る
   const rideBtn = document.getElementById('rideBtn'), growBtn = document.getElementById('growBtn');
   function canRide() { return phase === 'big' && !riding && growT < 0 && B.h.st === 'ground' && Math.hypot(pen.x - B.h.x, pen.z - B.h.z) < B.radius + 1.1 && Math.abs(pen.y - B.h.y) < 0.4; }
@@ -56,7 +56,7 @@
       const a = pad.read(), air = B.h.st === 'jair' || B.h.st === 'air' || B.h.st === 'flap';
       if (riding) B.step(dt, { mx, mz, walk: r.walk, press: r.press || (air && a.airTap), up: r.up, held: r.held, act: a, keySwing: r.keySwing, keyGrab: r.keyGrab }, world);
       else { pen.step(dt, mx, mz, r.walk, world); /* プレイヤーはペンギン。プルプルは自分で動く */
-        const inp = brain.tick(B, pen, dt, { riding, squash: k => skin.squash && skin.squash(k), push: (dx, dz) => pen.nudge(dx, dz, world), lift: () => pen.bump() }); /* 言葉では説明しない */
+        const inp = brain.tick(B, pen, dt, { riding, squash: k => skin.squash && skin.squash(k), push: (dx, dz) => pen.nudge(dx, dz, world), lift: (k, tr, raise) => { skin.strain && skin.strain(k, tr); pen.raise = raise || 0; } }); /* 言葉では説明しない */
         if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
       world.tick(dt);
       const v = B.view(); skin.setPose(v); let ev = null; while (B.events.length) { const e = B.events.shift(); ev = e; if (e && e.land != null) shownLast = Object.assign({}, B.last || {}, { rise: e.rise }); }
