@@ -62,7 +62,7 @@
       const v = B.view(); skin.setPose(v); let ev = null; while (B.events.length) { const e = B.events.shift(); ev = e; if (e && e.land != null) shownLast = Object.assign({}, B.last || {}, { rise: e.rise }); }
       // 振る・掴む：口（頭の先）のまわりで当たり・掴みを見る
       const head = B.headAt(v);
-      if (riding && ev && ev.strike != null) { const res = world.strike(head, ev.strike, 0.5 + B.radius); feel = res === 'cut' ? '振る：×' + ev.strike.toFixed(2) + ' → 切れた！' : res === 'weak' ? '振る：×' + ev.strike.toFixed(2) + ' → ペチッ（もっと速く振り抜く）' : '振る：×' + ev.strike.toFixed(2); feelT = 2.5; if (res === 'cut') msg('ツタが切れた！'); }
+      if (riding && ev && typeof ev.strike === 'number') { /* ev が 'lift' みたいな文字の時、'lift'.strike は文字列の古い関数になってまう → 数字の時だけ */ const res = world.strike(head, ev.strike, 0.5 + B.radius); feel = res === 'cut' ? '振る：×' + ev.strike.toFixed(2) + ' → 切れた！' : res === 'weak' ? '振る：×' + ev.strike.toFixed(2) + ' → ペチッ（もっと速く振り抜く）' : '振る：×' + ev.strike.toFixed(2); feelT = 2.5; if (res === 'cut') msg('ツタが切れた！'); }
       if (riding && B.h.st === 'grab') { const q = B.h.grip; if (!held) { const f = world.fruitNear(head, 0.4 + 0.2 * B.size, 1.0 * B.size); if (f && q >= 0.45) { if (q > 0.78) { world.crush(f); feel = '掴む：力 ' + Math.round(q * 100) + '% → 潰れた…'; feelT = 2.5; } else { held = f; f.st = 'held'; feel = '掴んだ！（力 ' + Math.round(q * 100) + '%）'; feelT = 2; } } }
         else if (q > 0.78) { world.crush(held); held = null; feel = '力入れすぎて潰れた…'; feelT = 2.5; } else if (q < 0.3) { world.drop(held); held = null; } }
       else if (held) { world.drop(held); held = null; }
