@@ -30,5 +30,29 @@ window.PlaySkins = (() => {
       const target = v.st === 'jair' || v.st === 'air' ? Math.max(-0.12, Math.min(0.18, v.vy * 0.025)) : v.st === 'charge' ? -0.12 : 0; kv += (-(k - target) * 140 - kv * 9) * dt; k += kv * dt; k = Math.max(-0.4, Math.min(0.35, k));
       wob.scale.set(1 - k * 0.5, 1 + k, 1 - k * 0.5); }
     return { g, inner, setPose, update, dispose() { for (const m of meshes.values()) m.geometry.dispose(); skin.dispose(); core.dispose(); } }; }
-  return { list: [['normal', 'ふつう'], ['puni', 'プニプニ']], normal, puni };
+  // プルプル：「関節の元」（中に浮かぶ芯の玉）＋「透明なプルプル成分」。玉の数＝関節の数（体の大きさとは別）
+  function pulu(B) { const g = new THREE.Group(), wob = new THREE.Group(), inner = new THREE.Group(); g.add(wob); wob.add(inner);
+    const mc = mainColor(B), col = mc ? new THREE.Color(mc).lerp(new THREE.Color(0xbff3ff), 0.35) : new THREE.Color(0x9fe6e0),
+      jelly = THREE.MeshPhysicalMaterial ? new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.42, clearcoat: 1, clearcoatRoughness: 0.1, emissive: col.clone().multiplyScalar(0.12), depthWrite: false })
+        : new THREE.MeshStandardMaterial({ color: col, roughness: 0.1, transparent: true, opacity: 0.42, depthWrite: false }),
+      nucMat = new THREE.MeshStandardMaterial({ color: col.clone().offsetHSL(0.02, 0.25, -0.28), roughness: 0.35, emissive: col.clone().offsetHSL(0, 0.2, -0.35).multiplyScalar(0.5) }),
+      meshes = new Map(), nucs = [], nucGeo = new THREE.SphereGeometry(1, 14, 10);
+    // 関節：骨の点（親の終わりと子の始まりは同じ玉）
+    const joints = []; { const seen = []; for (const b of B.D.bones) { const r0 = (b.wp && b.wp[0] && b.wp[0].r) || 0.04; b.pts.forEach((p, i) => { const dup = seen.find(q => Math.hypot(q.p[0] - p[0], q.p[1] - p[1], q.p[2] - p[2]) < r0 * 0.6); if (dup) return; const j = { bone: b.id, i, p, r: Math.max(0.014, Math.min(0.05, r0 * 0.42)) }; seen.push(j); joints.push(j); }); } }
+    for (const j of joints) { const m = new THREE.Mesh(nucGeo, nucMat); m.scale.setScalar(j.r); nucs.push(m); inner.add(m); }
+    let lastKey = null, k = 0, kv = 0, t = 0;
+    // プルプル成分は骨の肉付けより一回りふっくら（背の高さの6%ぶん外へ）。中の芯の玉が透けて見える
+    let hu = 0.05; for (const b of B.D.bones) for (const p of b.pts) hu = Math.max(hu, p[1]); const fat = hu * 0.06;
+    function inflate(geo) { geo.computeVertexNormals(); const p = geo.attributes.position.array, n = geo.attributes.normal.array; for (let i = 0; i < p.length; i++) p[i] += n[i] * fat; geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); return geo; }
+    function smooth(G) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(G.V.slice(), 3)); geo.setIndex(G.I.slice()); return inflate(geo); }
+    function setPose(v) { if (v.key === lastKey) return; lastKey = v.key; for (const b of B.D.bones) { const G = geomOf(B, b, v.P); if (!G) continue; let m = meshes.get(b.id);
+        if (m && m.geometry.attributes.position.count === G.V.length / 3) { m.geometry.attributes.position.array.set(G.V); inflate(m.geometry); }
+        else { if (m) { inner.remove(m); m.geometry.dispose(); } m = new THREE.Mesh(smooth(G), jelly); m.renderOrder = 2; meshes.set(b.id, m); inner.add(m); } }
+      joints.forEach((j, n) => { const P = v.P && v.P[j.bone], q = P && P[j.i] ? P[j.i] : j.p; nucs[n].position.set(q[0], q[1], q[2]); }); }
+    function update(dt, v, ev) { t += dt; if (ev && ev.land != null) kv -= Math.min(3.5, 0.8 + ev.land * 1.6); if (ev === 'lift') kv += 2.2;
+      const target = v.st === 'jair' || v.st === 'air' ? Math.max(-0.12, Math.min(0.18, v.vy * 0.025)) : v.st === 'charge' ? -0.12 : 0; kv += (-(k - target) * 140 - kv * 9) * dt; k += kv * dt; k = Math.max(-0.4, Math.min(0.35, k));
+      const br = 0.015 * Math.sin(t * 2.4); wob.scale.set(1 - k * 0.5 - br, 1 + k + br, 1 - k * 0.5 - br); /* 息をするみたいに少しふくらむ */
+      nucs.forEach((m, n) => { const s = joints[n].r * (1 + 0.08 * Math.sin(t * 3 + n * 1.7)); m.scale.setScalar(s); }); }
+    return { g, inner, setPose, update, squash(a) { kv -= a; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); jelly.dispose(); nucMat.dispose(); nucGeo.dispose(); } }; }
+  return { list: [['pulu', 'プルプル'], ['normal', 'ふつう'], ['puni', 'プニプニ']], normal, puni, pulu };
 })();

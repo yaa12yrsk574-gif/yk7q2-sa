@@ -15,7 +15,7 @@ window.PlayBody = (() => {
   const com = (P, ids) => window.JumpPhys.com(P, ids);
   // 作品 → 体（ポーズ・重心・ジャンプと羽ばたきの物理は、工房と同じ shared/jump.js）
   function make(work) { const d = work.data || work, D = prep(d), kind = TPL.detect(d), rest0 = d.rest || Object.fromEntries(d.bones.map(b => [b.id, b.pts])), T = window.BodyMotion.load();
-    const size = window.BodyMotion.sizeOf(d), root = (D.bones.find(b => b.parent == null) || D.bones[0]).id, ids = [root], rest = Object.fromEntries(D.bones.map(b => [b.id, b.pts])), cR = com(rest, ids);
+    const size = work.__size > 0 ? work.__size : window.BodyMotion.sizeOf(d), /* __size：草原の序盤みたいに、大きさを外から決める時（m に合わせる） */ root = (D.bones.find(b => b.parent == null) || D.bones[0]).id, ids = [root], rest = Object.fromEntries(D.bones.map(b => [b.id, b.pts])), cR = com(rest, ids);
     const M = {}; for (const s of SLOTS) { let A = animOf(d, s); if (!A && kind) { try { A = TPL.animFor(kind, s, rest0, d.bones); } catch (_) { A = null; } } if (!A || !A.keys || !A.keys.length) continue;
       const m = { A, len: A.len, P: [], c: [] }; for (let f = 0; f <= A.len; f++) { S = D; S.anim = A; const P = shift(poseAt(f), D.__o); m.P.push(P); m.c.push(com(P, ids)); }
       const pose = f => m.P[Math.max(0, Math.min(A.len, Math.round(f)))];
