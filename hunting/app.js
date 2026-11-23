@@ -122,9 +122,7 @@ class BoneBody { constructor(data, color) { this.D = prepData(data); this.g = ne
 function tokageData() { return TPL.data('tokage'); } // 骨と動きのお手本は tpl_lib.js
 // ============ 調査隊員（プレイヤー） ============
 const pl = { x: 0, z: 0, y: 0, yaw: Math.PI, g: new THREE.Group() }; /* 奥（-z）を向いて始まる */
-{ const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.95, 10), matBody(0x3b6ea8)); body.position.y = 0.72; const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), matBody(0xe9cfae)); head.position.y = 1.36;
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.18, 8), matBody(0xd9572b)); nose.rotation.x = Math.PI / 2; nose.position.set(0, 1.0, 0.24); const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 6), matBody(0x7a5a3a)); stick.position.set(0.28, 0.9, 0.15); stick.rotation.x = 0.4;
-  pl.g.add(body, head, nose, stick); scene.add(pl.g); }
+pl.g.add(window.PenguinModel.make(THREE)); scene.add(pl.g); /* 見た目は shared/penguin.js（草原と同じ） */
 // ============ キャンプ（拠点）：工房をひらける ============
 const CAMP = { x: 0, z: 0, r: 2.4 };
 // 鳥人間の会場：海に突き出た高台（高さ h）＋桟橋。桟橋の先（edge）からの距離が飛距離

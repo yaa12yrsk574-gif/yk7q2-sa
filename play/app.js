@@ -57,7 +57,7 @@
       if (riding) B.step(dt, { mx, mz, walk: r.walk, press: r.press || (air && a.airTap), up: r.up, held: r.held, act: a, keySwing: r.keySwing, keyGrab: r.keyGrab }, world);
       else { pen.step(dt, mx, mz, r.walk, world); /* プレイヤーはペンギン。プルプルは自分で動く */
         const inp = brain.tick(B, pen, dt, { riding, onWish: () => msg('プルプルは、一緒に登りたいみたい'), squash: k => skin.squash && skin.squash(k) });
-        if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: false, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
+        if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
       world.tick(dt);
       const v = B.view(); skin.setPose(v); let ev = null; while (B.events.length) { const e = B.events.shift(); ev = e; if (e && e.land != null) shownLast = Object.assign({}, B.last || {}, { rise: e.rise }); }
       // 振る・掴む：口（頭の先）のまわりで当たり・掴みを見る
