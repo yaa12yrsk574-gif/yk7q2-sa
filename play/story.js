@@ -47,7 +47,7 @@ window.PlayStory = (() => {
   // 落ち着き：動くのは用がある時だけ。それ以外はその場でじっと見てる
   function brain(world, opts) {
     const flower = opts.flower;
-    const S = {}; const reset = () => Object.assign(S, { tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'intro', t: 0, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
+    const S = {}; const reset = () => Object.assign(S, { mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'intro', t: 0, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
     reset();
     // 記号や絵は出さない。気持ちは全部 動きで出す（プレイヤーが読み取る）。say は「ぷるっ」と体で反応するだけ
     let sq = null; const say = (k) => { if (sq) sq(k === 'big' ? 2.4 : 1.4); };
@@ -91,33 +91,43 @@ window.PlayStory = (() => {
           if (S.far > 10) { S.far = 0; S.look = 2.2; say(); } /* なかなか来えへん：振り返って、ぷるっ */
           if (S.look > 0) { S.look -= dt; face(B, pen.x, pen.z, dt); return idle; }
           const sx = flower.x - 0.35, sz = flower.z + 0.1; const r = go(B, sx, sz, 0.4, 0.12); if (r.d < 0.12) face(B, flower.x, flower.z, dt, 1.5); return r; }
-        case 'notice': { // ふちまで寄って、身を乗り出して見下ろす。そのまましばらく動かへん
-          const r = go(B, S.edge[0], S.edge[1], 1, 0.06); if (r.d > 0.06 && S.t < 2) return r;
-          face(B, pen.x, pen.z, dt, 3); S.tiltT = -0.45; if (!S.held) { S.held = S.t; } if (S.t - S.held > 2.4) { S.st = 'down'; S.t = 0; S.held = 0; S.land = landSpot(B, pen, rock); } return idle; }
-        case 'down': { // 岩から飛び降りて、ペンギンの横へ。4秒たっても上におったら、一番近いふちから降りる
-          if (h.y < 0.05 && h.st === 'ground' && !onTop) { S.st = 'shuttle'; S.t = 0; S.n = 0; S.leg = 'rock'; return idle; }
-          if (S.t > 4 && onTop) { const ex = h.x - rock.x, ez = h.z - rock.z, hw = (rock.x1 - rock.x0) / 2, hd = (rock.z1 - rock.z0) / 2; const out = Math.abs(ex) / hw > Math.abs(ez) / hd ? [rock.x + Math.sign(ex || 1) * (hw + 1), h.z] : [h.x, rock.z + Math.sign(ez || 1) * (hd + 1)]; return go(B, out[0], out[1], 0.6, 0.05); }
+        // ---- 緩急：気持ちが前に出る所は速く、迷う・頑張る・気づく所は遅く、切り替わる所で止まる ----
+        case 'notice': { // 気づく（遅い）：ふと下を見る → ゆっくりふちへ寄って、身を乗り出す → 止まる
+          if (S.t < 0.9) { face(B, pen.x, pen.z, dt, 1.4); return idle; }
+          const r = go(B, S.edge[0], S.edge[1], 0.35, 0.06); if (r.d > 0.06 && S.t < 4) return r;
+          face(B, pen.x, pen.z, dt, 2); S.tiltT = -0.45; if (!S.held) S.held = S.t; if (S.t - S.held > 1.5) { S.st = 'down'; S.t = 0; S.held = 0; S.land = landSpot(B, pen, rock); say(); } return idle; }
+        case 'down': { // 飛び降りる（速い）：決めたら一気に
+          if (h.y < 0.05 && h.st === 'ground' && !onTop) { S.st = 'shuttle'; S.t = 0; S.n = 0; S.leg = 'rock'; S.mid = null; return idle; }
+          if (S.t > 4 && onTop) { const ex = h.x - rock.x, ez = h.z - rock.z, hw = (rock.x1 - rock.x0) / 2, hd = (rock.z1 - rock.z0) / 2; const out = Math.abs(ex) / hw > Math.abs(ez) / hd ? [rock.x + Math.sign(ex || 1) * (hw + 1), h.z] : [h.x, rock.z + Math.sign(ez || 1) * (hd + 1)]; return go(B, out[0], out[1], 1, 0.05); }
           return go(B, S.land[0], S.land[1], 1, 0.05); }
-        case 'shuttle': { // ペンギンと岩の間を行ったり来たり（岩の前で見上げる → ペンギンの前で振り返る）×2
-          if (S.leg === 'rock') { const b = baseSpot(B, pen, rock), r = go(B, b[0], b[1], 1, 0.1); if (r.d > 0.1 && S.t < 4) return r; face(B, rock.x, rock.z, dt, 4); S.tiltT = 0.35; if (!S.held) S.held = S.t; if (S.t - S.held > 0.8) { S.leg = 'pen'; S.held = 0; S.t = 0; } return idle; }
-          { const a = awaySpot(pen, rock, 0.9), r = go(B, a[0], a[1], 1, 0.1); if (r.d > 0.1 && S.t < 4) return r; face(B, pen.x, pen.z, dt, 4); /* ペンギンの向こうまで戻って振り返る */ if (!S.held) { S.held = S.t; say(); } if (S.t - S.held > 0.6) { S.held = 0; S.t = 0; S.n++; S.leg = 'rock'; if (S.n >= 2) { S.st = 'nudge'; } } return idle; } }
-        case 'nudge': { // ペンギンのうしろへ回って、岩の方へ押す
+        case 'shuttle': {
+          if (S.n === 0) { // 往復1回目（速い）：「あそこ！あそこ！」
+            if (S.leg === 'rock') { const b = baseSpot(B, pen, rock), r = go(B, b[0], b[1], 1, 0.1); if (r.d > 0.1 && S.t < 3) return r; face(B, rock.x, rock.z, dt, 6); S.tiltT = 0.4; if (!S.held) S.held = S.t; if (S.t - S.held > 0.55) { S.leg = 'pen'; S.held = 0; S.t = 0; } return idle; }
+            const a = awaySpot(pen, rock, 0.9), r = go(B, a[0], a[1], 1, 0.1); if (r.d > 0.1 && S.t < 3) return r; face(B, pen.x, pen.z, dt, 6); if (!S.held) { S.held = S.t; say(); } if (S.t - S.held > 0.5) { S.held = 0; S.t = 0; S.n = 1; S.leg = 'rock'; S.mid = null; } return idle; }
+          // 往復2回目（途中で止まる）：岩へ向かいかけて、半分で止まって振り返る。来ないのを見て、待つ
+          if (!S.mid) { const b = baseSpot(B, pen, rock); S.mid = [(h.x + b[0]) / 2, (h.z + b[1]) / 2]; }
+          const r = go(B, S.mid[0], S.mid[1], 0.8, 0.08); if (r.d > 0.08 && S.t < 3) return r;
+          if (!S.held) S.held = S.t; const w = S.t - S.held; if (w > 0.35) face(B, pen.x, pen.z, dt, 1.8); /* 一瞬おいて、ゆっくり振り返る */
+          if (w > 2.0) { S.st = 'nudge'; S.t = 0; S.held = 0; S.k = 0; } return idle; }
+        case 'nudge': { // 押す（遅い・重い）：うしろに回って、ぐっ、ぐっ、ぐっと区切って押す
           const ax = rock.x - pen.x, az = rock.z - pen.z, al = Math.hypot(ax, az) || 1, ux = ax / al, uz = az / al, bx = pen.x - ux * (B.radius + 0.12), bz = pen.z - uz * (B.radius + 0.12);
-          if (!S.pushing) { const r = go(B, bx, bz, 1, 0.08); if (r.d > 0.08 && S.t < 5) return r; S.pushing = S.t; }
-          face(B, rock.x, rock.z, dt, 6); const k = S.t - S.pushing; if (k < 1.4) { const f = Math.sin(k * Math.PI / 0.7) > 0 ? 0.45 : 0; if (f && ctx.push) ctx.push(ux * f * dt, uz * f * dt); B.h.x = pen.x - ux * (B.radius + 0.06); B.h.z = pen.z - uz * (B.radius + 0.06); return idle; }
-          S.pushing = 0; S.st = 'lift'; S.t = 0; S.n = 0; return idle; }
-        case 'lift': { // ペンギンの下にもぐって、持ち上げようとする ×2：ぐっと沈んで溜め → 震えながら伸び上がってペンギンが浮く → 耐えきれずベチャッ
-          if (!S.under) { const r = go(B, pen.x, pen.z, 1, 0.08); if (r.d > 0.08 && S.t < 2.5) return r; S.under = S.t; }
-          const k = S.t - S.under, H = S.n === 0 ? 0.14 : 0.08; /* 2回目は疲れて、浮く高さが低い */ B.h.x = pen.x; B.h.z = pen.z;
+          if (!S.pushing) { const r = go(B, bx, bz, 0.45, 0.08); if (r.d > 0.08 && S.t < 5) return r; S.pushing = S.t; }
+          face(B, rock.x, rock.z, dt, 6); const k = S.t - S.pushing, per = 0.85, c = Math.floor(k / per), f = k - c * per, L = ctx.lift || (() => {});
+          B.h.x = pen.x - ux * (B.radius + 0.06); B.h.z = pen.z - uz * (B.radius + 0.06);
+          if (c < 3) { if (f < 0.3) L(-0.25 * (f / 0.3), 0.2, 0); /* 縮んで溜めて */ else if (f < 0.5) { L(0.3, 0.5, 0); ctx.push && ctx.push(ux * 0.55 * dt, uz * 0.55 * dt); } /* ぐっ（ペンギンが少し動く） */ else L(0, 0, 0); return idle; }
+          L(null, 0, 0); S.pushing = 0; S.st = 'lift'; S.t = 0; S.n = 0; return idle; }
+        case 'lift': { // 持ち上げる（遅い→速い）：そろっともぐって、ゆっくり溜めて、震えながら伸びる。潰れる瞬間だけ一気に
+          if (!S.under) { const r = go(B, pen.x, pen.z, 0.35, 0.08); if (r.d > 0.08 && S.t < 3) return r; S.under = S.t; }
+          const k = S.t - S.under, H = S.n === 0 ? 0.14 : 0.08, A = 0.7, P = S.n === 0 ? 1.4 : 1.0; /* 2回目は疲れて、短く低い */ B.h.x = pen.x; B.h.z = pen.z;
           const L = ctx.lift || (() => {});
-          if (k < 0.35) L(-0.38 * (k / 0.35), 0, 0); /* 溜め：ぐっと沈む */
-          else if (k < 1.35) { const u = (k - 0.35) / 1.0, e = 1 - Math.pow(1 - u, 2); L(-0.38 + 0.8 * e, 0.3 + 0.7 * u, H * e * (1 + 0.15 * Math.sin(k * 38))); } /* 踏ん張り：震えながら伸び上がる、ペンギンがじわじわ浮く */
-          else if (!S.did) { S.did = 1; L(null, 0, 0); say('big'); } /* 潰れ：ベチャッ、ペンギンはストンと落ちる */
-          if (k > 1.9) { S.n++; S.under = 0; S.did = 0; S.t = 0; if (S.n >= 2) { S.st = 'look'; S.t = 0; S.front = awaySpot(pen, rock, 0.85); } else { const a = pen.yaw + Math.PI / 2; B.h.x += Math.sin(a) * 0.35; B.h.z += Math.cos(a) * 0.35; } }
+          if (k < A) L(-0.4 * Math.sin((k / A) * Math.PI / 2), 0.1, 0); /* 溜め：ゆっくり沈む */
+          else if (k < A + P) { const u = (k - A) / P, e = 1 - Math.pow(1 - u, 2); L(-0.4 + 0.85 * e, 0.3 + 0.7 * u, H * e * (1 + 0.15 * Math.sin(k * 38))); } /* 踏ん張り */
+          else if (!S.did) { S.did = 1; L(null, 0, 0); say('big'); } /* 潰れ：一気にベチャッ */
+          if (k > A + P + 0.7) { S.n++; S.under = 0; S.did = 0; S.t = 0; if (S.n >= 2) { S.st = 'look'; S.t = 0; S.front = awaySpot(pen, rock, 0.85); } else { const a = pen.yaw + Math.PI / 2; B.h.x += Math.sin(a) * 0.35; B.h.z += Math.cos(a) * 0.35; } }
           return idle; }
-        case 'look': { // 下から出てきて、ペンギンを見上げる（ここで初めてプレイヤーの番）
-          const r = go(B, S.front[0], S.front[1], 1, 0.08); if (r.d > 0.08 && S.t < 3) return r;
-          face(B, pen.x, pen.z, dt, 4); S.tiltT = 0.5; if (S.t > 0.8) { S.st = 'wish'; S.t = 0; S.wished = true; } return idle; }
+        case 'look': { // 見上げる（遅い）：のそっと出てきて、ゆっくり見上げる
+          const r = go(B, S.front[0], S.front[1], 0.3, 0.08); if (r.d > 0.08 && S.t < 4) return r;
+          face(B, pen.x, pen.z, dt, 1.5); if (!S.held) S.held = S.t; S.tiltT = Math.min(0.5, (S.t - S.held) * 0.4); if (S.t - S.held > 1.4) { S.st = 'wish'; S.t = 0; S.held = 0; S.wished = true; } return idle; }
         case 'wish': face(B, pen.x, pen.z, dt); S.tiltT = 0.5; if (S.t > 3 && ((S.t % 3.5) < dt)) say(); return idle; /* 見上げたまま待つ。たまに、ぷるっ */
         case 'grow': face(B, pen.x, pen.z, dt); return idle;
         case 'follow': default: { // ペンギンが2m離れるまでは、その場で見てる。離れたら右うしろへ歩いてくる（遠い時だけ急ぐ）
