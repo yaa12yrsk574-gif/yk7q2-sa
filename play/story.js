@@ -20,9 +20,10 @@ window.PlayStory = (() => {
       if (!blocked(world, nx, nz)) { P.x = nx; P.z = nz; } else if (!blocked(world, nx, P.z)) P.x = nx; else if (!blocked(world, P.x, nz)) P.z = nz; else P.v *= 0.3;
       const gy = world.groundAt(P.x, P.z, P.y + STEP);
       if (P.raise > 0) { P.y = gy + P.raise; P.vy = 0; } else if (P.y > gy + 0.02) { P.vy -= 16 * dt; P.y = Math.max(gy, P.y + P.vy * dt); if (P.y === gy) P.vy = 0; } else { P.y = gy; P.vy = 0; }
-      P.ph += dt * (P.v * 7 + 0.0001); P.pose(dt); };
+      P.ph += dt * (P.v * 9 + 0.0001); P.pose(dt); }; /* 歩幅が小さいので、跳ねる回数は多め */
     // よちよち：左右に揺れて弾む。立ち止まったら収まる
-    let sway = 0; P.pose = (dt, still) => { const a = still ? 0 : Math.min(1, P.v / 1.2); sway += (a - sway) * Math.min(1, dt * 8); body.rotation.z = Math.sin(P.ph) * 0.1 * sway; body.position.y = Math.abs(Math.sin(P.ph)) * 0.03 * sway; };
+    // とことこ：横には揺れず、1歩ごとにちょこんと跳ねる（縦揺れ）
+    let sway = 0; P.pose = (dt, still) => { const a = still ? 0 : Math.min(1, P.v / 1.2); sway += (a - sway) * Math.min(1, dt * 8); body.rotation.z = 0; body.position.y = Math.pow(Math.abs(Math.sin(P.ph)), 0.7) * 0.07 * sway; };
     P.nudge = (dx, dz, world) => { const nx = P.x + dx, nz = P.z + dz; if (!blocked(world, nx, nz)) { P.x = nx; P.z = nz; } }; /* プルプルに押される */
     P.bump = () => { if (P.y <= world0.groundAt(P.x, P.z, P.y + STEP) + 0.01) { P.y += 0.04; P.vy = 1.1; } }; /* 下から持ち上げられて、ちょっと浮く */
     P.place = () => { g.position.set(P.x, P.y, P.z); g.rotation.y = P.yaw; };

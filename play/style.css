@@ -27,3 +27,4 @@ body:not(.riding) #pad,body:not(.riding) #padRow{display:none!important}
 #bub.wish{background:#fff;border:2px solid #3b9c97;border-radius:18px;padding:6px;box-shadow:0 3px 12px #0003}
 #bub.wish canvas{width:120px;height:75px;display:block}
 #bub::after{content:"";position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);border:8px solid transparent;border-top-color:#3b9c97;border-bottom:0}
+#errBar{display:none;position:fixed;left:10px;right:10px;top:54px;z-index:20;background:#c23a3a;color:#fff;font:700 12px/1.4 sans-serif;padding:8px 10px;border-radius:10px;box-shadow:0 3px 10px #0004;pointer-events:none;word-break:break-all}

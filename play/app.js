@@ -63,6 +63,12 @@
       row.querySelectorAll('button').forEach(b => b.onclick = () => { if (b.dataset.r) { pad.moves.forEach(m => pad.reset(m)); msg('線を元に戻した'); } else { pad.startEdit(b.dataset.m); msg(window.PlayPad.MOVES[b.dataset.m].name + 'の線をパッドに描いてな（描き始めが開始の点）'); } row.classList.remove('show'); }); }; }
   let feel = null, feelT = 0;
   let last = performance.now(), shownLast = null;
+  // ---- 止まらへん仕組み：1フレームでエラーが出ても次のフレームは回す。何が起きたかは赤い帯に出して、端末にも残す（💢と同じで後から読める）----
+  const errBar = document.createElement('div'); errBar.id = 'errBar'; document.body.appendChild(errBar); let errN = 0, errLast = '';
+  function loop(now) { try { frame(now); } catch (e) { errN++; const where = ((e.stack || '').split('\n').find(l => /play\/|shared\//.test(l)) || '').replace(/^\s*at\s*/, '').replace(/https?:\/\/[^/]+\//, '').replace(/\?v=\w+/, ''), h = B && B.h,
+      info = '止まりかけた（' + errN + '回目）：' + e.message + ' ／ 場所：' + where + ' ／ 状態：' + (h ? h.st : '-') + (riding ? '・乗ってる' : '・歩き') + (hang ? '・ツタ' : '') + '・' + phase + '・' + brain.S.st;
+      if (info !== errLast) { errLast = info; errBar.textContent = info; errBar.style.display = 'block'; try { const L = JSON.parse(localStorage.getItem('yuya_play_errors') || '[]'); L.push({ t: new Date().toISOString(), info, stack: String(e.stack || '').slice(0, 800) }); localStorage.setItem('yuya_play_errors', JSON.stringify(L.slice(-20))); } catch (_) {} console.error(e); }
+      last = now; renderer.render(scene, cam); requestAnimationFrame(loop); } }
   function frame(now) { const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
     if (B) { const r = ctl.read(); camYaw -= r.orbit.dx * 0.006; camPitch = Math.max(0.05, Math.min(1.2, camPitch + r.orbit.dy * 0.004)); camDist = Math.max(2, Math.min(30, camDist * r.orbit.zoom));
       const sy = Math.sin(camYaw), cy = Math.cos(camYaw), mx = -sy * r.fz + cy * r.fx, mz = -cy * r.fz - sy * r.fx; /* カメラから見た前後左右 → 世界の向き */
@@ -104,8 +110,8 @@
       info.innerHTML = rows.map(t => '<div>' + t + '</div>').join(''); info.style.display = rows.length && riding ? 'block' : 'none';
     }
     for (const t of tags) { const p = proj(new THREE.Vector3(t.b.x, t.b.top + 0.25, t.b.z1)); t.e.style.display = p.z < 1 ? 'block' : 'none'; t.e.style.transform = 'translate(' + (p.x - 24) + 'px,' + (p.y - 12) + 'px)'; }
-    renderer.render(scene, cam); requestAnimationFrame(frame); }
-  pickFirst(); requestAnimationFrame(frame);
+    renderer.render(scene, cam); requestAnimationFrame(loop); }
+  pickFirst(); requestAnimationFrame(loop);
   msg(matchMedia('(pointer: coarse)').matches ? '左をなぞってペンギンを歩かせる。プルプルについて行こう' : 'WASDでペンギンを歩かせる。プルプルについて行こう');
   // 工房から戻った時：作品を読み直す（形や動きが変わってるかも）
   window.__play = { refresh() { const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
