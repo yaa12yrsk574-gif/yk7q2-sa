@@ -28,3 +28,6 @@ body:not(.riding) #pad,body:not(.riding) #padRow{display:none!important}
 #bub.wish canvas{width:120px;height:75px;display:block}
 #bub::after{content:"";position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);border:8px solid transparent;border-top-color:#3b9c97;border-bottom:0}
 #errBar{display:none;position:fixed;left:10px;right:10px;top:54px;z-index:20;background:#c23a3a;color:#fff;font:700 12px/1.4 sans-serif;padding:8px 10px;border-radius:10px;box-shadow:0 3px 10px #0004;pointer-events:none;word-break:break-all}
+/* 工房に行きたい時：工房ボタンがぷるっと呼ぶ（文字は出さない） */
+#toolBtn.call{animation:callJelly 1.1s ease-in-out infinite;border-color:#3b9c97;color:#2d7e7a}
+@keyframes callJelly{0%,60%,100%{transform:scale(1)}70%{transform:scale(1.18,.86)}80%{transform:scale(.9,1.12)}90%{transform:scale(1.05,.97)}}

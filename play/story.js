@@ -48,7 +48,7 @@ window.PlayStory = (() => {
   // 落ち着き：動くのは用がある時だけ。それ以外はその場でじっと見てる
   function brain(world, opts) {
     const flower = opts.flower;
-    const S = {}; const reset = () => Object.assign(S, { r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'intro', t: 0, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
+    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'intro', t: 0, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
     reset();
     // 記号や絵は出さない。気持ちは全部 動きで出す（プレイヤーが読み取る）。say は「ぷるっ」と体で反応するだけ
     let sq = null; const say = (k) => { if (sq) sq(k === 'big' ? 2.4 : 1.4); };
@@ -56,7 +56,7 @@ window.PlayStory = (() => {
     const face = (B, x, z, dt, sp) => { B.h.yaw = turnTo(B.h.yaw, Math.atan2(x - B.h.x, z - B.h.z), (sp || 2.5) * dt); };
     const idle = { mx: 0, mz: 0, walk: true };
     // 跳び乗る岩：この子の「跳ぶ」で届く中で、ペンギンが越えられない一番高い岩（できれば 0.6m）
-    function pickRock(B) { const reach = B.M.jump ? B.M.jump.J.h * 0.9 : 1.1;
+    function pickRock(B) { const cr = world.crabRock; if (cr) { flower.g.position.set(cr.x - 0.6, cr.top, cr.z - 0.3); flower.x = flower.g.position.x; flower.y = cr.top; flower.z = flower.g.position.z; return cr; } const reach = B.M.jump ? B.M.jump.J.h * 0.9 : 1.1;
       const ok = world.boxes.filter(b => !b.vine && b.top > STEP + 0.08 && b.top < reach && Math.hypot(b.x, b.z - 3) < 16);
       const r = ok.find(b => b.label === '0.6m') || ok.sort((a, b) => b.top - a.top)[0] || world.boxes.find(b => b.label === '0.6m');
       flower.g.position.set(r.x + Math.min(0.9, (r.x1 - r.x0) / 2 - 0.3), r.top, r.z - 0.4); flower.x = flower.g.position.x; flower.y = r.top; flower.z = flower.g.position.z; return r; }
@@ -76,7 +76,7 @@ window.PlayStory = (() => {
     function roam(B, pen, dt, ctx, rock, dPen) { const h = B.h, moving = pen.v > 0.25; S.st = 'roam'; if (!S.r) S.r = 'near'; S.rt = (S.rt || 0) + dt; S.mimic = false;
       if (moving) { S.walkT = (S.walkT || 0) + dt; S.stillT = 0; } else { if (S.walkT > 2.5 && S.r === 'near' && Math.random() < 0.65) { S.r = 'circle'; S.rt = 0; S.ca = null; } S.walkT = 0; S.stillT = (S.stillT || 0) + dt; }
       // 崖：ペンギンが岩の近くまで来たら、上の花に気づく（序盤だけ）
-      if (ctx.phase === 'small' && !S.wished && rectDist(rock, pen.x, pen.z) < 3.5 && pen.y < 0.1 && S.r !== 'act') { G(B, null); S.st = 'spot'; S.t = 0; say(); return idle; }
+      if (ctx.phase === 'small' && !S.wished && !S.crabDone && rectDist(rock, pen.x, pen.z) < 4 && pen.y < 0.1 && S.r !== 'act' && world.crab.st === 'climb') { G(B, null); S.st = 'crabSee'; S.t = 0; S.tries = 0; say(); return idle; }
       const toPen = (sp, stop) => { const a = pen.yaw - Math.PI * 0.7, tx = pen.x + Math.sin(a) * (0.75 + B.radius), tz = pen.z + Math.cos(a) * (0.75 + B.radius); return go(B, tx, tz, sp, stop || 0.25); };
       switch (S.r) {
         case 'near': {
@@ -131,6 +131,28 @@ window.PlayStory = (() => {
         case 'meet3': { // やっぱり気になる。首をかしげて、ぴょんぴょん
           const r = go(B, pen.x, pen.z, 0.45, 0.9); if (r.d > 0.9 && S.t < 4) return r;
           face(B, pen.x, pen.z, dt, 3); if (!S.did) { S.did = 1; G(B, 'g_tilt'); } else if (S.did === 1 && !h.gest) { S.did = 2; G(B, 'g_hop'); } else if (S.did === 2 && !h.gest) { S.st = 'roam'; S.r = 'near'; S.t = 0; S.did = 0; S.curT = 2.5; } return idle; }
+        // ---- 1つ目の願い：カニ。見とれる → 真似してずり落ちる×2 → カニを見に行く → 工房に行きたがる → 爪を作ったらもう一回 ----
+        case 'crabSee': { const c = world.crab; face(B, c.x, c.z, dt, 3); S.tiltT = 0.3 + Math.min(0.25, c.y * 0.2); /* 見上げて、登っていくのを目で追う */
+          if (S.t > 3.2 || c.st === 'top') { S.st = 'climbTry'; S.t = 0; say('big'); } return idle; }
+        case 'climbTry': { // 壁の前まで行って、飛びつく
+          if (!S.cl) { const wx = rock.x - 0.35, wz = rock.z1 + B.radius + 0.06, r = go(B, wx, wz, 0.8, 0.06); if (r.d > 0.06 && S.t < 5) return r; h.yaw = Math.PI; S.cl = window.PlayClimb.start(B, rock.top); S.fall = 0; }
+          const c = window.PlayClimb.step(S.cl, dt); h.y = c.y; h.yaw = Math.PI; h.st = 'ground'; h.v = 0; if (B.M.walk) { h.gm = B.M.walk; h.ph = (h.ph + dt * 24 * (c.ratio >= 1 ? 1 : 0.6 + c.ratio)) % B.M.walk.len; } S.tiltT = 1.45; /* 腹を壁に向けて、歩きの動きで掻く */
+          if (c.st === 'top') { h.z = rock.z1 - B.radius - 0.25; h.y = rock.top; h.gm = null; S.cl = null; S.crabDone = true; S.st = 'crabTop'; S.t = 0; say('big'); return null; }
+          if (c.st === 'fail') { S.cl = null; S.tries++; S.st = 'climbFall'; S.t = 0; S.fv = 0; } return null; }
+        case 'climbFall': { // ずり落ちて、べちゃ
+          if (h.y > 0) { S.fv -= 16 * dt; h.y = Math.max(0, h.y + S.fv * dt); S.tiltT = 1.2; if (h.y === 0) say('big'); return null; }
+          h.z = rock.z1 + B.radius + 0.12; if (S.t < 1.3) { face(B, rock.x, rock.z, dt, 2); S.tiltT = 0.35; return idle; } /* 見上げる */
+          if (S.tries < 2) { S.st = 'climbTry'; S.t = 0; } else if (!S.observed) { S.st = 'observe'; S.t = 0; } else { S.st = 'wantTool'; S.t = 0; S.back = false; } return idle; }
+        case 'observe': { // 自分からカニを見に行って、じーっと見る（ゆっくり・骨が透ける・爪先が光る）
+          const c = world.crab, ox = c.x + 0.9, oz = rock.z1 + 1.1, r = go(B, ox, oz, 0.6, 0.08); if (r.d > 0.08 && S.t < 4) return r;
+          face(B, c.x, c.z, dt, 3); S.tiltT = 0.25 + Math.min(0.3, c.y * 0.25); if (!S.lap0) S.lap0 = c.laps + 1;
+          if ((c.laps >= S.lap0 && S.t > 6) || S.t > 16) { S.observed = true; S.lap0 = 0; S.st = 'wantTool'; S.t = 0; S.back = false; G(B, 'g_hop'); } return idle; }
+        case 'wantTool': { // 工房に行きたい：ペンギンのそばで、ぴょんぴょん。工房から戻ったら、もう一回
+          if (S.back) { S.back = false; S.tries = 0; S.st = 'climbTry'; S.t = 0; return idle; }
+          if (dPen > 2) return go(B, pen.x, pen.z, 0.8, 1.2);
+          face(B, pen.x, pen.z, dt, 3); if (!h.gest && S.t > 2.5) { S.t = 0; G(B, pick(['g_hop', 'g_hop', 'g_tilt'])); } return idle; }
+        case 'crabTop': { // 登れた！ 上でぴょんぴょん → 下を見たら、ペンギンが取り残されてる（→ 2つ目の願い）
+          if (S.t > 0.3 && !S.did) { S.did = 1; G(B, 'g_hop'); } if (S.t > 2 && !h.gest) { S.did = 0; S.st = 'top'; S.t = 0; S.wait = 0; S.far = 0; } return idle; }
         case 'spot': face(B, flower.x, flower.z, dt, 3); S.tiltT = 0.25; /* 見上げて固まる */ if (S.t > 1.4) { S.st = 'go'; S.t = 0; } return idle;
         case 'go': { // 岩の手前まで歩いて、向き直って、ぴょん
           if (h.st !== 'ground') return { mx: Math.sin(h.yaw) * 0.6, mz: Math.cos(h.yaw) * 0.6, walk: true };

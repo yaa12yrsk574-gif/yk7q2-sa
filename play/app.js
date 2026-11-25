@@ -8,7 +8,7 @@
   const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} } };
   // 相棒：工房で保存した作品（なければツノトカゲのお手本）
   function works() { const l = (window.BoneStorage.loadWorks() || []).filter(w => w && w.data && w.data.bones && w.data.bones.length); if (!l.length) l.push({ id: 'tpl', name: 'ツノトカゲ（お手本）', data: window.BoneTemplates.data('tokage') }); return l; }
-  let held = null, B = null, skin = null, skinKind = LS.get('yuya_play_skin2') || 'pulu', camYaw = 0, camPitch = 0.42, camDist = 0, camT = new THREE.Vector3();
+  let held = null, B = null, skin = null, skinKind = LS.get('yuya_play_skin2') || 'pulu', camYaw = 0, camPitch = 0.42, camDist = 0, camDz = 5.6, camT = new THREE.Vector3();
   // ---- 序盤：ペンギン（プレイヤー）とプルプル。phase＝small（0.4m・自分で動く）→ big（0.7m・乗れる）。乗ってる間だけプルプルを操作 ----
   const ST = window.PlayStory, pen = ST.penguin(scene, world), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
   let mimB = 0, phase = 'small', riding = false, growT = -1, growFrom = 1;
@@ -101,9 +101,11 @@
       growBtn.style.display = phase === 'small' && brain.S.wished ? 'block' : 'none';
       rideBtn.style.display = (riding ? canDrop() : canRide()) ? 'block' : 'none'; rideBtn.textContent = riding ? '⤵ 降りる' : '🫧 乗る';
       // カメラ：後ろからついていく（歩いてる間はペンギン、乗ったらプルプル）
-      const fx = riding ? B.h.x : pen.x, fz = riding ? B.h.z : pen.z, fy = riding ? B.h.y + B.cR[1] * B.size + 0.75 : pen.y + 0.55;
-      camT.lerp(new THREE.Vector3(fx, fy, fz), Math.min(1, dt * 6)); const cp = Math.cos(camPitch);
-      cam.position.set(camT.x + Math.sin(camYaw) * cp * camDist, camT.y + Math.sin(camPitch) * camDist, camT.z + Math.cos(camYaw) * cp * camDist); cam.lookAt(camT);
+      const obs = !riding && brain.S.st === 'observe'; world.crab.observe(obs); document.getElementById('toolBtn').classList.toggle('call', !riding && brain.S.st === 'wantTool');
+      let fx = riding ? B.h.x : pen.x, fz = riding ? B.h.z : pen.z, fy = riding ? B.h.y + B.cR[1] * B.size + 0.75 : pen.y + 0.55;
+      if (obs) { const c = world.crab; fx = (fx + c.x * 2) / 3; fz = (fz + c.z * 2) / 3; fy = Math.max(fy, c.y + 0.3); } /* 観察：カニの方へ寄る */
+      camT.lerp(new THREE.Vector3(fx, fy, fz), Math.min(1, dt * 6)); const cp = Math.cos(camPitch); const cd = camDist * (obs ? 0.6 : 1);
+      camDz += (cd - camDz) * Math.min(1, dt * 3); cam.position.set(camT.x + Math.sin(camYaw) * cp * camDz, camT.y + Math.sin(camPitch) * camDz, camT.z + Math.cos(camYaw) * cp * camDz); cam.lookAt(camT);
       // 表示：溜め・前のジャンプ
       const h = B.h, rows = []; if (h.st === 'charge' || h.st === 'takeoff') rows.push('溜め ' + Math.round(h.c * 100) + '%'); if (h.st === 'grab') rows.push('力 ' + Math.round(h.grip * 100) + '%（ちょうど 45〜78%）');
       if (feelT > 0) { feelT -= dt; rows.push(feel); }
@@ -115,5 +117,5 @@
   pickFirst(); requestAnimationFrame(loop);
   msg(matchMedia('(pointer: coarse)').matches ? '左をなぞってペンギンを歩かせる' : 'WASDでペンギンを歩かせる');
   // 工房から戻った時：作品を読み直す（形や動きが変わってるかも）
-  window.__play = { refresh() { const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
+  window.__play = { refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
 })();
