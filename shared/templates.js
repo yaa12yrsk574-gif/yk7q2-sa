@@ -79,6 +79,16 @@ window.BoneTemplates = (() => {
       const keys = []; for (let f = 0; f < 16; f += 2) { const ph = f / 16 * Math.PI * 2, legs = {}; for (const [id, off] of [[5, 0], [8, 0], [6, Math.PI], [7, Math.PI]]) { const u = ph + off; legs[id] = [0.1 * Math.cos(u), 0.12 + 0.05 * Math.sin(u), 0.03]; }
         keys.push({ f, pose: tokPose(R, { dy: -0.02, sway: 0.05 * Math.sin(ph), neckPitch: -0.12, neckYaw: -0.1 * Math.sin(ph), tailYaw: 0.6 * Math.sin(ph + 1.2), legs }) }); }
       out.push({ slot: 'swim', name: '泳ぐ', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'かく' }, { f: 8, label: '逆でかく' }], keys, seg: {} } }); }
+    // ---- 仕草（草原で、好奇心のまま勝手にやるちっちゃい動き）。工房で「＋○○」から足して直せる ----
+    { const K = (f, o) => ({ f, pose: tokPose(R, o) }), up = h => ({ 5: [0, h, 0], 6: [0, h, 0], 7: [0, h, 0], 8: [0, h, 0] }), G = (slot, name, len, loop, guides, keys) => out.push({ slot, name, anim: { len, loop, guides: guides.map(([f, label]) => ({ f, label })), keys, seg: {} } });
+      G('g_look', 'きょろきょろ', 24, false, [[0, 'ふだん'], [5, '右を見る'], [14, '左を見る']], [K(0, {}), K(5, { neckYaw: 0.5, neckPitch: -0.05, tailYaw: -0.15 }), K(10, { neckYaw: 0.5, neckPitch: -0.08 }), K(14, { neckYaw: -0.5, tailYaw: 0.15 }), K(19, { neckYaw: -0.5, neckPitch: -0.05 }), K(24, {})]);
+      G('g_tilt', '首かしげ', 18, false, [[0, 'ふだん'], [5, 'かしげる'], [13, '戻る']], [K(0, {}), K(5, { neckYaw: 0.25, neckPitch: 0.1, sway: 0.03, hornPitch: 0.15 }), K(13, { neckYaw: 0.28, neckPitch: 0.12, sway: 0.03, hornPitch: 0.18 }), K(18, {})]);
+      G('g_sniff', 'くんくん', 16, false, [[0, 'ふだん'], [3, '鼻を寄せる'], [11, '離す']], [K(0, {}), K(3, { dz: 0.02, neckPitch: 0.35 }), K(5, { dz: 0.03, neckPitch: 0.43 }), K(7, { dz: 0.02, neckPitch: 0.35 }), K(9, { dz: 0.03, neckPitch: 0.43 }), K(11, { neckPitch: 0.3 }), K(16, {})]);
+      G('g_peek', 'のぞき込む', 24, false, [[0, 'ふだん'], [6, 'のぞく'], [18, '戻る']], [K(0, {}), K(6, { dz: 0.06, dy: -0.03, neckPitch: 0.55, tailPitch: -0.2 }), K(18, { dz: 0.065, dy: -0.035, neckPitch: 0.6, tailPitch: -0.22, tailYaw: 0.15 }), K(24, {})]);
+      G('g_poke', 'つつく', 16, false, [[0, 'ふだん'], [5, 'つん'], [9, 'つん']], [K(0, {}), K(3, { dz: -0.02, neckPitch: -0.1 }), K(5, { dz: 0.05, neckPitch: 0.6 }), K(7, { neckPitch: 0.1 }), K(9, { dz: 0.05, neckPitch: 0.6 }), K(11, { neckPitch: 0.1 }), K(16, {})]);
+      G('g_hop', 'ぴょんぴょん', 16, false, [[0, 'しゃがむ'], [4, 'ぴょん'], [12, 'ぴょん']], [K(0, {}), K(2, { dy: -0.04 }), K(4, { dy: 0.09, legs: up(0.09), tailYaw: 0.3, neckPitch: -0.15 }), K(6, { dy: -0.03 }), K(8, {}), K(10, { dy: -0.04 }), K(12, { dy: 0.09, legs: up(0.09), tailYaw: -0.3, neckPitch: -0.15 }), K(14, { dy: -0.03 }), K(16, {})]);
+      G('g_shake', 'ぷるぷる', 12, false, [[0, 'ふだん'], [1, 'ぷる'], [11, '止まる']], [K(0, {}), K(1, { sway: 0.05, dx: 0.02 }), K(3, { sway: -0.05, dx: -0.02 }), K(5, { sway: 0.045, dx: 0.018 }), K(7, { sway: -0.04, dx: -0.015 }), K(9, { sway: 0.025, dx: 0.01 }), K(12, {})]);
+      G('g_doze', 'うとうと', 48, true, [[0, '目がとろん'], [24, 'こっくり']], [K(0, { dy: -0.05, neckPitch: 0.3, tailYaw: 0.2 }), K(24, { dy: -0.06, neckPitch: 0.45, tailYaw: 0.22 })]); }
     return { R, acts: out }; }
   // ===== ツバサトカゲ（翼2・脚2。飛べる）=====
   function tsubasaData() { const B = [], P = (...a) => a.map(([t, r]) => ({ t, r }));
@@ -122,6 +132,16 @@ window.BoneTemplates = (() => {
     { const keys = []; for (let f = 0; f < 16; f += 2) { const ph = f / 16 * Math.PI * 2, legs = {}; for (const [id, off] of [[5, 0], [6, Math.PI]]) { const u = ph + off; legs[id] = [0.12 * Math.cos(u), 0.1 + 0.05 * Math.sin(u), 0]; }
         keys.push({ f, pose: tsuPose(R, Object.assign({ dy: -0.03, neckPitch: -0.1 + 0.05 * Math.sin(ph), tailYaw: 0.4 * Math.sin(ph + 1.2), legs }, { up: -0.1, fold: 0.4, sweep: -1.1 })) }); }
       out.push({ slot: 'swim', name: '泳ぐ', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'かく' }, { f: 8, label: '逆でかく' }], keys, seg: {} } }); }
+    // ---- 仕草（ツバサトカゲ版）：首を横に振れないので、しっぽと体で出す ----
+    { const G = (slot, name, len, loop, guides, keys) => out.push({ slot, name, anim: { len, loop, guides: guides.map(([f, label]) => ({ f, label })), keys, seg: {} } }), W = o => Object.assign({}, WF, o), up = h => ({ 5: [0, h, 0], 6: [0, h, 0] });
+      G('g_look', 'きょろきょろ', 24, false, [[0, 'ふだん'], [5, '右'], [14, '左']], [K(0, W({})), K(5, W({ dx: 0.03, headPitch: -0.1, tailYaw: -0.3 })), K(14, W({ dx: -0.03, headPitch: -0.1, tailYaw: 0.3 })), K(24, W({}))]);
+      G('g_tilt', '首かしげ', 18, false, [[0, 'ふだん'], [5, 'かしげる'], [13, '戻る']], [K(0, W({})), K(5, W({ dx: 0.03, headPitch: 0.2, neckPitch: 0.1 })), K(13, W({ dx: 0.03, headPitch: 0.22, neckPitch: 0.12 })), K(18, W({}))]);
+      G('g_sniff', 'くんくん', 16, false, [[0, 'ふだん'], [3, '鼻を寄せる'], [11, '離す']], [K(0, W({})), K(3, W({ dz: 0.02, neckPitch: 0.35 })), K(5, W({ dz: 0.03, neckPitch: 0.43 })), K(7, W({ dz: 0.02, neckPitch: 0.35 })), K(9, W({ dz: 0.03, neckPitch: 0.43 })), K(16, W({}))]);
+      G('g_peek', 'のぞき込む', 24, false, [[0, 'ふだん'], [6, 'のぞく'], [18, '戻る']], [K(0, W({})), K(6, W({ dz: 0.06, dy: -0.03, neckPitch: 0.55, headPitch: 0.2, tailPitch: -0.2 })), K(18, W({ dz: 0.065, dy: -0.035, neckPitch: 0.6, headPitch: 0.22, tailPitch: -0.22 })), K(24, W({}))]);
+      G('g_poke', 'つつく', 16, false, [[0, 'ふだん'], [5, 'つん'], [9, 'つん']], [K(0, W({})), K(3, W({ dz: -0.02, neckPitch: -0.1 })), K(5, W({ dz: 0.05, neckPitch: 0.6 })), K(7, W({ neckPitch: 0.1 })), K(9, W({ dz: 0.05, neckPitch: 0.6 })), K(16, W({}))]);
+      G('g_hop', 'ぴょんぴょん', 16, false, [[0, 'しゃがむ'], [4, 'ぴょん'], [12, 'ぴょん']], [K(0, W({})), K(2, W({ dy: -0.04 })), K(4, W({ dy: 0.09, legs: up(0.09), up: 0.3, tailYaw: 0.3 })), K(6, W({ dy: -0.03 })), K(10, W({ dy: -0.04 })), K(12, W({ dy: 0.09, legs: up(0.09), up: 0.3, tailYaw: -0.3 })), K(16, W({}))]);
+      G('g_shake', 'ぷるぷる', 12, false, [[0, 'ふだん'], [1, 'ぷる'], [11, '止まる']], [K(0, W({})), K(1, W({ dx: 0.025 })), K(3, W({ dx: -0.025 })), K(5, W({ dx: 0.02 })), K(7, W({ dx: -0.015 })), K(12, W({}))]);
+      G('g_doze', 'うとうと', 48, true, [[0, '目がとろん'], [24, 'こっくり']], [K(0, W({ dy: -0.05, neckPitch: 0.3 })), K(24, W({ dy: -0.06, neckPitch: 0.45 }))]); }
     return { R, acts: out }; }
   // ===== 人の素体（アニメ工房用）=====
   function hitoData() { const B = [], P = (...a) => a.map(([t, r]) => ({ t, r }));

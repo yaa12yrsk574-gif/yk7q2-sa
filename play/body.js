@@ -3,7 +3,7 @@
 window.PlayBody = (() => {
   let S = null; const core = window.BoneCore.create(THREE, () => S, v => { S = v; }), { poseAt, boneGeom } = core;
   const clone = o => JSON.parse(JSON.stringify(o)), TPL = window.BoneTemplates, FR = 24;
-  const SLOTS = ['idle', 'walk', 'run', 'jump', 'flap', 'attack'], TAP_MAX = 1.9; /* 普段のジャンプの高さの上限（m）。これより上は腕（勝負ジャンプ）が要る */
+  const GEST = ['g_look', 'g_tilt', 'g_sniff', 'g_peek', 'g_poke', 'g_hop', 'g_shake', 'g_doze'], SLOTS = ['idle', 'walk', 'run', 'jump', 'flap', 'attack'].concat(GEST), TAP_MAX = 1.9; /* 普段のジャンプの高さの上限（m）。これより上は腕（勝負ジャンプ）が要る */
   // 足元を地面、真ん中を原点に（狩り場と同じ置き方）
   function prep(d) { const D = clone(d); D.bones = D.bones.filter(b => b.pts && b.pts.length >= 2); let minY = 1e9, sx = 0, sz = 0, n = 0;
     for (const b of D.bones) for (const p of b.pts) { minY = Math.min(minY, p[1]); sx += p[0]; sz += p[2]; n++; }
@@ -89,7 +89,8 @@ window.PlayBody = (() => {
     if (air(h.st)) { h.vy -= g * dt; h.y += h.vy * dt; h.peak = Math.max(h.peak, h.y); if (h.vy <= 0 && h.y <= gy) { const fall = h.peak - gy; h.y = gy; h.vy = 0; h.st = 'ground'; h.f = 0; B.events.push({ land: fall, rise: h.peak - (h.y0 || 0) }); } }
     else if ((h.st === 'ground' || busy) && h.y > gy + 0.03) { h.st = 'air'; h.vy = 0; h.from = 'fall'; h.peak = h.y; h.y0 = h.y; }
     else if (h.st === 'ground' || busy) h.y = gy;
-    if (h.st === 'ground') { const m = (h.v > pw.top * 1.15 && M.run) ? M.run : (h.v > 0.08 ? (M.walk || M.run) : M.idle), ref = m === M.run ? pr.top : pw.top; if (m) h.ph = (h.ph + dt * FR * (m === M.idle ? 1 : Math.max(0.5, Math.min(1.6, h.v / Math.max(0.1, ref))))) % m.len; h.gm = m; } }
+    if (h.st === 'ground' && h.gest && M[h.gest.slot] && h.v < 0.12) { const g = M[h.gest.slot]; h.gest.t += dt; let f = h.gest.t * FR; if (f >= g.len) { if (g.A.loop) f %= g.len; else { h.gest = null; f = 0; } } if (h.gest) { h.gm = g; h.ph = f; } }
+    else if (h.st === 'ground') { if (h.gest && h.v >= 0.12) h.gest = null; const m = (h.v > pw.top * 1.15 && M.run) ? M.run : (h.v > 0.08 ? (M.walk || M.run) : M.idle), ref = m === M.run ? pr.top : pw.top; if (m) h.ph = (h.ph + dt * FR * (m === M.idle ? 1 : Math.max(0.5, Math.min(1.6, h.v / Math.max(0.1, ref))))) % m.len; h.gm = m; } }
   // 今の形と置き方：slot・コマ・pose（作品の中の座標）・ref（pose のどこを置き場所に合わせるか）・置き場所（m）・向き
   function view(B) { const h = B.h, M = B.M, s = B.size; let m = null, f = 0, ref = [B.cR[0], 0, B.cR[2]], y = h.y;
     if (h.st === 'charge' || h.st === 'takeoff') { m = M.jump; f = h.f; const c = m.c[0]; ref = [c[0], 0, c[2]]; }
@@ -100,5 +101,6 @@ window.PlayBody = (() => {
     else if (h.gm) { m = h.gm; f = Math.floor(h.ph) % m.len; const c = m.c[f]; ref = [c[0], 0, c[2]]; }
     const fi = m ? Math.max(0, Math.min(m.len, Math.round(f))) : 0;
     return { P: m ? m.P[fi] : B.rest, key: (m ? Object.keys(M).find(k => M[k] === m) : 'rest') + ':' + fi, ref, x: h.x, y, z: h.z, yaw: h.yaw, size: s, st: h.st, vy: h.vy }; }
-  return { make, boneGeom: b => { return boneGeom(b); }, withState: (D, fn) => { const k = S; S = D; try { return fn(core); } finally { S = k; } } };
+  function gesture(B, slot) { if (!slot) { B.h.gest = null; return true; } if (!B.M[slot] || B.h.st !== 'ground') return false; B.h.gest = { slot, t: 0 }; return true; }
+  return { make, gesture, GEST, boneGeom: b => { return boneGeom(b); }, withState: (D, fn) => { const k = S; S = D; try { return fn(core); } finally { S = k; } } };
 })();

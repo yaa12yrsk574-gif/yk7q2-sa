@@ -48,7 +48,7 @@ window.PlayStory = (() => {
   // 落ち着き：動くのは用がある時だけ。それ以外はその場でじっと見てる
   function brain(world, opts) {
     const flower = opts.flower;
-    const S = {}; const reset = () => Object.assign(S, { mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'intro', t: 0, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
+    const S = {}; const reset = () => Object.assign(S, { r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'intro', t: 0, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
     reset();
     // 記号や絵は出さない。気持ちは全部 動きで出す（プレイヤーが読み取る）。say は「ぷるっ」と体で反応するだけ
     let sq = null; const say = (k) => { if (sq) sq(k === 'big' ? 2.4 : 1.4); };
@@ -70,12 +70,67 @@ window.PlayStory = (() => {
     function baseSpot(B, pen, rock) { const cx = Math.max(rock.x0, Math.min(rock.x1, pen.x)), cz = Math.max(rock.z0, Math.min(rock.z1, pen.z)), dx = pen.x - cx, dz = pen.z - cz, d = Math.hypot(dx, dz) || 1, o = B.radius + 0.15; return [cx + dx / d * o, cz + dz / d * o]; }
     // ペンギンから見て岩と反対側（ペンギンが岩にくっついてても、行ったり来たりできるように）
     function awaySpot(pen, rock, d) { const cx = Math.max(rock.x0, Math.min(rock.x1, pen.x)), cz = Math.max(rock.z0, Math.min(rock.z1, pen.z)); let ux = pen.x - cx, uz = pen.z - cz; const l = Math.hypot(ux, uz); if (l < 0.01) { ux = pen.x - rock.x; uz = pen.z - rock.z; } const m = Math.hypot(ux, uz) || 1; return [pen.x + ux / m * d, pen.z + uz / m * d]; }
+    const G = (B, slot) => window.PlayBody.gesture(B, slot), pick = a => a[(Math.random() * a.length) | 0];
+    const ACT = { flower: ['g_sniff', 'g_tilt'], stone: ['g_poke', 'g_peek'], puddle: ['g_peek', 'g_shake'], bfly: ['g_hop', 'g_look'], fruit: ['g_sniff', 'g_poke'] };
+    // ---- ふだん：好奇心のまま勝手に動く。気になるものに寄り道、ペンギンのマネ、ぐるぐる、うとうと。離れすぎたら、はっと戻る ----
+    function roam(B, pen, dt, ctx, rock, dPen) { const h = B.h, moving = pen.v > 0.25; S.st = 'roam'; if (!S.r) S.r = 'near'; S.rt = (S.rt || 0) + dt; S.mimic = false;
+      if (moving) { S.walkT = (S.walkT || 0) + dt; S.stillT = 0; } else { if (S.walkT > 2.5 && S.r === 'near' && Math.random() < 0.65) { S.r = 'circle'; S.rt = 0; S.ca = null; } S.walkT = 0; S.stillT = (S.stillT || 0) + dt; }
+      // 崖：ペンギンが岩の近くまで来たら、上の花に気づく（序盤だけ）
+      if (ctx.phase === 'small' && !S.wished && rectDist(rock, pen.x, pen.z) < 3.5 && pen.y < 0.1 && S.r !== 'act') { G(B, null); S.st = 'spot'; S.t = 0; say(); return idle; }
+      const toPen = (sp, stop) => { const a = pen.yaw - Math.PI * 0.7, tx = pen.x + Math.sin(a) * (0.75 + B.radius), tz = pen.z + Math.cos(a) * (0.75 + B.radius); return go(B, tx, tz, sp, stop || 0.25); };
+      switch (S.r) {
+        case 'near': {
+          if (h.gest && dPen < 3) return idle;
+          if (dPen > 2.2) { G(B, null); if (moving && !S.mimicked && Math.random() < 0.5) { S.r = 'mimic'; S.rt = 0; S.mimicked = 1; return idle; } return toPen(dPen > 4 ? 1 : 0.6); }
+          if (!moving) S.mimicked = 0;
+          if (S.stillT > 7) { S.r = 'doze'; S.rt = 0; return idle; }
+          S.curT = (S.curT == null ? 3 : S.curT) - dt;
+          if (S.curT <= 0) { S.curT = 3 + Math.random() * 3; const now = performance.now() / 1000, c = world.interests.filter(it => (S.cd[it.__id || (it.__id = 'i' + Math.random())] || 0) < now && (it.kind !== 'fruit' || it.f.st === 'ground') && Math.hypot(it.x - h.x, it.z - h.z) < 4.5 && Math.hypot(it.x - pen.x, it.z - pen.z) < 6 && rectDist(rock, it.x, it.z) > 0.3);
+            if (c.length) { S.it = pick(c); S.cd[S.it.__id] = now + 25; S.r = 'go'; S.rt = 0; return idle; } }
+          S.nextG = (S.nextG == null ? 2 : S.nextG) - dt; if (S.nextG <= 0) { S.nextG = 2.5 + Math.random() * 3; G(B, pick(['g_look', 'g_tilt', 'g_shake', 'g_sniff', 'g_look'])); }
+          if (dPen > 0.6) face(B, pen.x, pen.z, dt, 1.2); return idle; }
+        case 'mimic': { // ペンギンの横に並んで、同じ速さで、同じリズムでとことこ（跳ねるのは app 側でペンギンの足に合わせる）
+          S.mimic = true; const a = pen.yaw + Math.PI / 2, ox = Math.sin(a) * (0.55 + B.radius), oz = Math.cos(a) * (0.55 + B.radius), tx = pen.x - ox + Math.sin(pen.yaw) * 0.1, tz = pen.z - oz + Math.cos(pen.yaw) * 0.1, dx = tx - h.x, dz = tz - h.z, d = Math.hypot(dx, dz);
+          if (!moving || S.rt > 7) { S.r = 'near'; S.rt = 0; if (!moving) { h.yaw = pen.yaw; G(B, 'g_hop'); } return idle; }
+          const sp = Math.min(1, (pen.v / 1.7) + d * 0.8); return d > 0.05 ? { mx: (dx / d) * sp, mz: (dz / d) * sp, walk: pen.v < 1.2, d } : { mx: Math.sin(pen.yaw) * pen.v / 1.7, mz: Math.cos(pen.yaw) * pen.v / 1.7, walk: true }; }
+        case 'go': { // 気になるものへ（ちょうちょは追いかける）
+          const it = S.it, reach = it.kind === 'bfly' ? 0.55 : it.kind === 'puddle' ? 0.75 : B.radius + 0.1, r = go(B, it.x, it.z, it.kind === 'bfly' ? 1 : 0.7, reach);
+          if (dPen > 6.5 || S.rt > 8) { S.r = 'back'; S.rt = 0; S.said = 0; return idle; } if (r.d > reach) return r;
+          S.r = 'act'; S.rt = 0; S.seq = ACT[it.kind].slice(); return idle; }
+        case 'act': { face(B, S.it.x, S.it.z, dt, 4);
+          if (!h.gest) { if (S.seq.length) G(B, S.seq.shift()); else { S.r = dPen > 3 ? 'back' : 'near'; S.rt = 0; S.said = 0; } } return idle; }
+        case 'back': { // 夢中になってた！ はっ → 急いで戻る → ぐるぐる
+          if (!S.said) { S.said = 1; say(); } if (S.rt < 0.35) { face(B, pen.x, pen.z, dt, 6); return idle; }
+          const r = go(B, pen.x, pen.z, 1, 1.1); if (r.d > 1.1 && S.rt < 8) return r; S.r = 'circle'; S.rt = 0; S.ca = null; return idle; }
+        case 'circle': { // ペンギンのまわりをぐるぐる（1周半）→ ぴょんぴょん
+          const R = 0.7 + B.radius; if (S.ca == null) { S.ca = Math.atan2(h.x - pen.x, h.z - pen.z); S.cs = S.ca; } S.ca += dt * 3.2;
+          if (S.ca - S.cs > Math.PI * 3 || S.rt > 5) { S.r = 'near'; S.rt = 0; face(B, pen.x, pen.z, dt, 9); G(B, 'g_hop'); return idle; }
+          const tx = pen.x + Math.sin(S.ca + 0.5) * R, tz = pen.z + Math.cos(S.ca + 0.5) * R; return go(B, tx, tz, 1, 0.02); }
+        case 'doze': { // ペンギンがじっとしてたら、横にくっついて、うとうと
+          if (moving || dPen > 2.5) { G(B, null); S.r = 'near'; S.rt = 0; say(); S.stillT = 0; return idle; }
+          const a = pen.yaw + Math.PI / 2, tx = pen.x + Math.sin(a) * (B.radius + 0.22), tz = pen.z + Math.cos(a) * (B.radius + 0.22), r = go(B, tx, tz, 0.35, 0.06);
+          if (r.d > 0.06 && S.rt < 4) return r; h.yaw = turnTo(h.yaw, pen.yaw, 2 * dt); if (!h.gest) G(B, 'g_doze'); return idle; }
+      } return idle; }
     function tick(B, pen, dt, ctx) { S.t += dt; S.cool = Math.max(0, S.cool - dt); if (S.emoT > 0) { S.emoT -= dt; if (S.emoT <= 0) S.emo = null; } sq = ctx.squash; S.tilt += ((S.tiltT || 0) - S.tilt) * Math.min(1, dt * 5); S.tiltT = 0; /* のぞき込む(−)・見上げる(＋)：その状態が毎フレーム決める */
       const h = B.h, dPen = Math.hypot(pen.x - h.x, pen.z - h.z), rock = S.rock || (S.rock = pickRock(B)), onTop = h.y > rock.top - 0.05 && rectDist(rock, h.x, h.z) < 0.01;
       if (ctx.riding) { S.st = 'ride'; return null; }
       if (S.st === 'ride') S.st = 'follow';
       switch (S.st) {
-        case 'intro': if (S.t > 0.4) face(B, pen.x, pen.z, dt); if (S.t > 2.2) { S.st = 'spot'; S.t = 0; say(); } return idle; /* 花に気づいて、ぷるっ */
+        // ---- 出会い：人見知りやのに、好奇心に負けて寄ってくる ----
+        case 'intro': { // 花のにおいを嗅いでて、ペンギンに気づいてへん
+          if (S.t > 0.3 && !S.did) { S.did = 1; G(B, 'g_sniff'); }
+          if ((dPen < 3.2 || S.t > 4) && !h.gest) { S.st = 'meet1'; S.t = 0; S.did = 0; say(); } return idle; }
+        case 'meet1': { // はっ → 固まって見る → そろそろ近づく
+          if (S.t < 1.1) { face(B, pen.x, pen.z, dt, 5); return idle; }
+          const tx = h.x + (pen.x - h.x) * 0.5, tz = h.z + (pen.z - h.z) * 0.5; if (!S.mt) S.mt = [tx, tz]; const r = go(B, S.mt[0], S.mt[1], 0.35, 0.08); if (r.d > 0.08 && S.t < 4) return r;
+          S.st = 'meet2'; S.t = 0; S.mt = null; return idle; }
+        case 'meet2': { // 近すぎた！ さっと下がって、ぷるぷる
+          if (!S.mt) { const ax = h.x - pen.x, az = h.z - pen.z, l = Math.hypot(ax, az) || 1; S.mt = [h.x + ax / l * 0.7, h.z + az / l * 0.7]; }
+          const r = go(B, S.mt[0], S.mt[1], 1, 0.08); if (r.d > 0.08 && S.t < 1.5) { h.yaw = Math.atan2(pen.x - h.x, pen.z - h.z); return r; } /* 前を向いたまま下がる */
+          face(B, pen.x, pen.z, dt, 4); if (!S.did) { S.did = 1; G(B, 'g_shake'); } if (S.t > 2.2 && !h.gest) { S.st = 'meet3'; S.t = 0; S.did = 0; S.mt = null; } return idle; }
+        case 'meet3': { // やっぱり気になる。首をかしげて、ぴょんぴょん
+          const r = go(B, pen.x, pen.z, 0.45, 0.9); if (r.d > 0.9 && S.t < 4) return r;
+          face(B, pen.x, pen.z, dt, 3); if (!S.did) { S.did = 1; G(B, 'g_tilt'); } else if (S.did === 1 && !h.gest) { S.did = 2; G(B, 'g_hop'); } else if (S.did === 2 && !h.gest) { S.st = 'roam'; S.r = 'near'; S.t = 0; S.did = 0; S.curT = 2.5; } return idle; }
         case 'spot': face(B, flower.x, flower.z, dt, 3); S.tiltT = 0.25; /* 見上げて固まる */ if (S.t > 1.4) { S.st = 'go'; S.t = 0; } return idle;
         case 'go': { // 岩の手前まで歩いて、向き直って、ぴょん
           if (h.st !== 'ground') return { mx: Math.sin(h.yaw) * 0.6, mz: Math.cos(h.yaw) * 0.6, walk: true };
@@ -131,10 +186,7 @@ window.PlayStory = (() => {
           face(B, pen.x, pen.z, dt, 1.5); if (!S.held) S.held = S.t; S.tiltT = Math.min(0.5, (S.t - S.held) * 0.4); if (S.t - S.held > 1.4) { S.st = 'wish'; S.t = 0; S.held = 0; S.wished = true; } return idle; }
         case 'wish': face(B, pen.x, pen.z, dt); S.tiltT = 0.5; if (S.t > 3 && ((S.t % 3.5) < dt)) say(); return idle; /* 見上げたまま待つ。たまに、ぷるっ */
         case 'grow': face(B, pen.x, pen.z, dt); return idle;
-        case 'follow': default: { // ペンギンが2m離れるまでは、その場で見てる。離れたら右うしろへ歩いてくる（遠い時だけ急ぐ）
-          if (!S.moving && dPen > 2.0) S.moving = true;
-          if (S.moving) { const a = pen.yaw - Math.PI * 0.7, tx = pen.x + Math.sin(a) * (0.8 + B.radius), tz = pen.z + Math.cos(a) * (0.8 + B.radius); const r = go(B, tx, tz, dPen > 4 ? 1 : 0.55, 0.3); if (r.d < 0.3) S.moving = false; return r; }
-          if (dPen > 0.6) face(B, pen.x, pen.z, dt, 1.2); return idle; }
+        case 'follow': case 'roam': default: return roam(B, pen, dt, ctx, rock, dPen);
       } }
     return { S, tick, reset };
   }

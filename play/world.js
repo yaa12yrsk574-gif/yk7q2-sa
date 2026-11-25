@@ -27,7 +27,7 @@ window.PlayWorld = (() => {
     const fruitNear = (p, r, ry) => { let best = null, bd = r; for (const f of fruits) if (f.st === 'ground') { const q = f.m.position, d = Math.hypot(q.x - p[0], q.z - p[2]); if (d < bd && Math.abs(q.y - p[1]) < (ry || r)) { bd = d; best = f; } } return best; }; /* 横の近さ＋高さの差 */
     function crush(f) { f.st = 'gone'; f.t = 6; f.m.visible = false; const sp = new THREE.Mesh(new THREE.CircleGeometry(0.28, 12), splatMat); sp.rotation.x = -Math.PI / 2; sp.position.set(f.m.position.x, groundAt(f.m.position.x, f.m.position.z, f.m.position.y + 0.3) + 0.01, f.m.position.z); scene.add(sp); f.splat = sp; }
     function drop(f) { f.st = 'ground'; const p = f.m.position; p.y = groundAt(p.x, p.z, p.y) + 0.17; }
-    function tick(dt) { for (const c of vineG.children) if (c.userData.fall) { c.rotation.x += dt * 2.5; c.position.y -= dt * 1.5; c.scale.multiplyScalar(1 - dt * 0.8); if (c.position.y < -1) { c.visible = false; c.userData.fall = 0; } }
+    function tick(dt) { tickInterests(dt); for (const c of vineG.children) if (c.userData.fall) { c.rotation.x += dt * 2.5; c.position.y -= dt * 1.5; c.scale.multiplyScalar(1 - dt * 0.8); if (c.position.y < -1) { c.visible = false; c.userData.fall = 0; } }
       if (vineG.userData.shake > 0) { vineG.userData.shake -= dt; vineG.position.x = Math.sin(vineG.userData.shake * 60) * 0.04 * vineG.userData.shake; }
       for (const f of fruits) if (f.st === 'gone') { f.t -= dt; if (f.t <= 0) { if (f.splat) { scene.remove(f.splat); f.splat = null; } f.st = 'ground'; f.m.visible = true; f.m.position.set(f.home[0], 0.17, f.home[1]); } } }
     // ---- ぶら下がれるツタ：木の枝から1本垂れてる。ハサミで掴むとぶら下がって揺れる。奥の 1.4m の岩へ飛び移れる ----
@@ -43,8 +43,19 @@ window.PlayWorld = (() => {
     swing.setEnd(swing.rest());
     // ツタ（支点→先っぽ）に一番近い点と、その距離
     swing.near = (q) => { const P0 = swing.pivot, P1 = swing.rest(), v = [P1[0] - P0[0], P1[1] - P0[1], P1[2] - P0[2]], w = [q[0] - P0[0], q[1] - P0[1], q[2] - P0[2]], L2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2], t = Math.max(0.25, Math.min(1, (w[0] * v[0] + w[1] * v[1] + w[2] * v[2]) / L2)), c = [P0[0] + v[0] * t, P0[1] + v[1] * t, P0[2] + v[2] * t]; return { p: c, d: Math.hypot(q[0] - c[0], q[1] - c[1], q[2] - c[2]), L: swing.L * t }; };
+    // ---- 気になるもの：プルプルが好奇心で寄っていく（花・光る石・水たまり・ちょうちょ。落ちてる実も）----
+    const interests = [], iMat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, flatShading: true });
+    for (const [x, z, c] of [[-2.6, 1.2, 0xffd34a], [2.4, 0.4, 0xff8fb8], [-3.2, -3, 0xb9a2ff], [3.6, -2.6, 0xffffff], [-1.2, -4.6, 0xff8fb8]]) { const g = new THREE.Group(), st = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.013, 0.2, 4), iMat(0x4f8a3a)); st.position.y = 0.1; g.add(st);
+      for (let i = 0; i < 5; i++) { const pe = new THREE.Mesh(new THREE.SphereGeometry(0.04, 5, 3), iMat(c)); const a = i / 5 * Math.PI * 2; pe.scale.set(1, 0.4, 0.6); pe.position.set(Math.cos(a) * 0.04, 0.2, Math.sin(a) * 0.04); g.add(pe); } g.position.set(x, 0, z); scene.add(g); interests.push({ kind: 'flower', x, z, g }); }
+    for (const [x, z] of [[1.4, -1.2], [-2, -6]]) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.07), new THREE.MeshStandardMaterial({ color: 0x9fe6ff, emissive: 0x2a6a8a, roughness: 0.2, flatShading: true })); m.position.set(x, 0.06, z); scene.add(m); interests.push({ kind: 'stone', x, z, g: m }); }
+    { const m = new THREE.Mesh(new THREE.CircleGeometry(0.55, 14), new THREE.MeshStandardMaterial({ color: 0x7fb6d6, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.8 })); m.rotation.x = -Math.PI / 2; m.position.set(4.2, 0.01, 1.8); m.scale.set(1.3, 1, 1); scene.add(m); interests.push({ kind: 'puddle', x: 4.2, z: 1.8, g: m }); }
+    const bfly = []; for (const [x, z, c] of [[-1, -1.5, 0xffe066], [2.5, -4.5, 0xff9ad5]]) { const g = new THREE.Group(), wm = new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }), w1 = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.06), wm), w2 = w1.clone(); w1.position.x = 0.035; w2.position.x = -0.035; g.add(w1, w2); g.position.set(x, 0.5, z); scene.add(g);
+      const it = { kind: 'bfly', x, z, g, w1, w2, home: [x, z], t: Math.random() * 10 }; bfly.push(it); interests.push(it); }
+    for (const f of fruits) interests.push({ kind: 'fruit', get x() { return f.m.position.x; }, get z() { return f.m.position.z; }, f });
+    function tickInterests(dt) { for (const b of bfly) { b.t += dt; b.x = b.home[0] + Math.sin(b.t * 0.37) * 2.2 + Math.sin(b.t * 1.3) * 0.3; b.z = b.home[1] + Math.sin(b.t * 0.23 + 1) * 1.8; b.g.position.set(b.x, 0.45 + 0.2 * Math.sin(b.t * 2.1), b.z); b.g.rotation.y = b.t * 0.5; const fl = Math.sin(b.t * 22) * 0.9; b.w1.rotation.y = fl; b.w2.rotation.y = -fl; }
+      for (const it of interests) if (it.kind === 'flower') it.g.rotation.z = Math.sin(performance.now() / 900 + it.x) * 0.05; }
     // ある場所の地面の高さ（その高さ y より下にある一番高い面）
     function groundAt(x, z, y) { let g = 0; for (const b of boxes) if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.top <= y && b.top > g) g = b.top; return g; }
-    return { boxes, groundAt, strike, fruitNear, crush, drop, tick, fruits, swing }; }
+    return { boxes, groundAt, strike, fruitNear, crush, drop, tick, fruits, swing, interests }; }
   return { create };
 })();

@@ -510,6 +510,11 @@ const SLOTS = { idle: { name: '待機', len: 24, loop: true, guides: [[0, 'は�
   glide: { name: '滑空', len: 24, loop: true, guides: [[0, '広げる']] },
   fall: { name: '落下', len: 12, loop: true, guides: [[0, '落ちる']] },
   land: { name: '着地', len: 10, loop: false, guides: [[0, '着地'], [3, '沈み'], [10, '戻り']] },
+  /* 仕草：草原でプルプルが勝手にやるちっちゃい動き（お手本つき。気になるものだけ直す） */
+  g_look: { name: '仕草：きょろきょろ', len: 24, loop: false, guides: [[0, 'ふだん'], [5, '右を見る'], [14, '左を見る']] }, g_tilt: { name: '仕草：首かしげ', len: 18, loop: false, guides: [[0, 'ふだん'], [5, 'かしげる'], [13, '戻る']] },
+  g_sniff: { name: '仕草：くんくん', len: 16, loop: false, guides: [[0, 'ふだん'], [3, '鼻を寄せる'], [11, '離す']] }, g_peek: { name: '仕草：のぞき込む', len: 24, loop: false, guides: [[0, 'ふだん'], [6, 'のぞく'], [18, '戻る']] },
+  g_poke: { name: '仕草：つつく', len: 16, loop: false, guides: [[0, 'ふだん'], [5, 'つん'], [9, 'つん']] }, g_hop: { name: '仕草：ぴょんぴょん', len: 16, loop: false, guides: [[0, 'しゃがむ'], [4, 'ぴょん'], [12, 'ぴょん']] },
+  g_shake: { name: '仕草：ぷるぷる', len: 12, loop: false, guides: [[0, 'ふだん'], [1, 'ぷる'], [11, '止まる']] }, g_doze: { name: '仕草：うとうと', len: 48, loop: true, guides: [[0, '目がとろん'], [24, 'こっくり']] },
   swim: { name: '泳ぐ', len: 16, loop: true, guides: [[0, 'かく'], [8, '逆でかく']] } };
 function newAnim(slot) { { const k = TPL.detect(S), A = k && TPL.animFor(k, slot, S.rest || snapshot(), S.bones); if (A) return A; } /* 設計図にお手本があればそれで始める */ const T = SLOTS[slot] || SLOTS.idle; return { len: T.len, loop: T.loop, guides: T.guides.map(([f, label]) => ({ f, label })), keys: [{ f: 0, pose: clone(S.rest || snapshot()) }], seg: {} }; }
 function drawActSel() { const el = $('actSel'); if (!S.acts) return; const sig = JSON.stringify([S.acts.map(a => a.name), S.actI]); if (el.dataset.sig === sig) return; el.dataset.sig = sig; el.innerHTML = '';
