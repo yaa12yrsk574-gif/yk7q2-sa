@@ -111,7 +111,7 @@
       gx += (gxT - gx) * Math.min(1, dt * 4);
       const tilt = brain.S.tilt; skin.update(dt, v, ev); mimB += ((brain.S.mimic && !riding && B.h.v > 0.15 ? 1 : 0) - mimB) * Math.min(1, dt * 8); const hopY = mimB * Math.pow(Math.abs(Math.sin(pen.ph)), 0.7) * 0.07 * (B.Hm / 0.4); /* マネ：ペンギンと同じリズムで跳ねる */ skin.g.position.set(v.x, v.y + B.radius * 0.6 * Math.max(0, tilt) + hopY, v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm * gx); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
       // ペンギン：乗ってる時はプルプルの背中に座る
-      if (riding || carrying) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06 + strainK * B.Hm * 0.5; /* 背中（胴の骨の高さ）に座る。乗せてみてる時は沈む */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } pen.place();
+      if (riding || carrying) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06 + strainK * B.Hm * 0.5; /* 背中（胴の骨の高さ）に座る。乗せてみてる時は沈む */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } pen.place(); if (!riding && !carrying) BE.track('pen', pen.x, pen.z); BE.track('pulu', v.x, v.z, (B.Hm || 0.4) / 0.4); /* 砂の足跡 */
       // 吹き出し：プルプルの頭の上
       bub.show(null); /* 吹き出しは出さない（動きで伝える） */ bub.tick(dt); { const p = proj(new THREE.Vector3(v.x, v.y + B.Hm * gm + 0.18, v.z)); bub.place(p.x, p.y, p.z < 1); }
       growBtn.style.display = 'none'; /* 仮ボタンは引退（本番の叶え方：カメ→かけら→工房） */
