@@ -58,6 +58,44 @@ window.PlayBeach = (() => {
       if (jf.rt != null) { jf.rt += dt; jf.ring.scale.setScalar(1 + jf.rt * 4); jf.ring.material.opacity = Math.max(0, 0.8 - jf.rt); if (jf.rt > 1) jf.rt = null; }
       for (const p of prints) if (p.m.visible) { p.a -= dt * (p.m.position.z > wz - 0.2 ? 1.5 : 0.006); p.m.material.opacity = Math.max(0, p.a); if (p.a <= 0) p.m.visible = false; } };
     return X; }
+
+  // ---- 波の線：点のキラキラはやめて、白いか細い線で描く（アニメの海）----
+  //   ・海岸と平行な短い弧が、にゅっと伸びて、岸へ流されて、細くなって消える。沖は短くまばら、手前ほど長く密に
+  //   ・寄せる波に合わせて、何本かがまとまって岸へ流れてくる（波の列）
+  //   ・太陽の方向だけ、細かい横線が多い（光の道）
+  //   ・波打ち際は、ギザギザした細い白線が寄せては返す（2本：いま寄せてる線と、引いていく名残り）
+  function makeWaveLines(scene, B) { const SHORE = B.SHORE, N = 150, SEG = 6, R = (a, b) => a + Math.random() * (b - a);
+    const nv = N * (SEG + 1) * 2, pos = new Float32Array(nv * 3), idx = []; for (let k = 0; k < N; k++) for (let i = 0; i < SEG; i++) { const a = (k * (SEG + 1) + i) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })); mesh.renderOrder = 6; mesh.frustumCulled = false; scene.add(mesh);
+    const S = []; for (let k = 0; k < N; k++) S.push({ live: false });
+    const SUN = Math.atan2(12, 8); /* 太陽の向き（world の光と同じ） */
+    function spawn(x, z, kind) { const st = S.find(q => !q.live); if (!st) return; const dist = Math.max(0, z - SHORE), near = Math.max(0, 1 - dist / 22);
+      Object.assign(st, { live: true, x, z, age: 0, life: kind === 'sun' ? R(0.5, 1.1) : R(1.6, 3.2), L: kind === 'sun' ? R(0.15, 0.45) : R(0.35, 0.6) + near * R(0.8, 1.8), W: kind === 'sun' ? 0.018 : 0.02 + near * 0.012, bend: R(0.04, 0.12) * (Math.random() < 0.8 ? 1 : -1), v: kind === 'sun' ? 0.1 : R(0.25, 0.6) * (0.4 + near), tilt: R(-0.12, 0.12) }); }
+    const bands = []; let bandT = 1.5, cam = null;
+    function camXZ() { const c = B.cam; return c ? [c.position.x, c.position.z] : [0, SHORE - 6]; }
+    // 波打ち際の2本の線
+    const SX = 180, sp = [new Float32Array((SX + 1) * 2 * 3), new Float32Array((SX + 1) * 2 * 3)], si = []; for (let i = 0; i < SX; i++) { const a = i * 2; si.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    const shore = sp.map((arr, n) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3)); g.setIndex(si); const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: n ? 0.45 : 0.9, depthWrite: false, side: THREE.DoubleSide })); m.renderOrder = 6; m.frustumCulled = false; scene.add(m); return { g, arr, m }; });
+    let back = SHORE, t = 0;
+    function tick(dt, wz) { t += dt; const [cx, cz] = camXZ();
+      // 波の列：寄せる波のたびに、沖から岸へ帯が流れてくる。帯の上に線がまとまって生まれる
+      bandT -= dt; if (bandT <= 0) { bandT = R(2.2, 3.6); bands.push({ z: SHORE + R(9, 14), v: R(0.9, 1.3), n: 0 }); }
+      for (let i = bands.length - 1; i >= 0; i--) { const b = bands[i]; b.z -= b.v * dt; b.n += dt * 9; while (b.n >= 1) { b.n--; spawn(cx + R(-14, 14), b.z + R(-0.3, 0.3), 'band'); } if (b.z < wz + 0.6) bands.splice(i, 1); }
+      // まばらな線（沖ほど少ない）と、太陽の方向の光の道
+      if (Math.random() < dt * 14) { const r = Math.random(), z = wz + 0.8 + 26 * r * r; spawn(cx + R(-16, 16), z, 'free'); }
+      if (Math.random() < dt * 22) { const d = R(3, 28), z = cz + Math.cos(SUN) * d, x = cx + Math.sin(SUN) * d + R(-1.2, 1.2) * (0.4 + d * 0.06); if (z > wz + 0.6) spawn(x, z, 'sun'); }
+      const y = 0.035 + 0.012 * Math.sin(B.t * 0.8);
+      for (let k = 0; k < N; k++) { const q = S[k], base = k * (SEG + 1) * 2 * 3; if (q.live) { q.age += dt; q.z -= q.v * dt; if (q.age > q.life || q.z < wz + 0.3) q.live = false; }
+        for (let i = 0; i <= SEG; i++) { const o = base + i * 6; if (!q.live) { pos[o + 1] = pos[o + 4] = -9; continue; } const a = q.age / q.life, grow = Math.min(1, a / 0.3), fade = a < 0.6 ? 1 : 1 - (a - 0.6) / 0.4, u = i / SEG, s = (u - 0.5) * q.L * (0.35 + 0.65 * grow);
+          const x = q.x + s * Math.cos(q.tilt), z = q.z + s * Math.sin(q.tilt) + q.bend * (1 - (2 * u - 1) * (2 * u - 1)) * q.L * 0.3, w = q.W * Math.pow(Math.sin(Math.PI * u), 0.8) * fade * (0.6 + 0.4 * grow);
+          pos[o] = x; pos[o + 1] = y; pos[o + 2] = z - w; pos[o + 3] = x; pos[o + 4] = y; pos[o + 5] = z + w; } }
+      geo.attributes.position.needsUpdate = true;
+      // 波打ち際：寄せてる線は波のふちにぴったり、名残りの線は引いた所にゆっくり残って薄れる
+      if (wz < back) back = wz; else back = Math.min(wz, back + dt * 0.18); const backZ = back, gap = Math.max(0, Math.min(1, (wz - back) / 0.5)); /* 名残り：一番寄せた所に残って、ゆっくり引いていく */
+      shore.forEach((S2, n) => { const arr = S2.arr, z0 = n ? backZ : wz + 0.04, W = n ? 0.012 : 0.022; for (let i = 0; i <= SX; i++) { const x = cx - 45 + i * 0.5, jag = 0.06 * Math.sin(x * 2.3 + t * (n ? 0.4 : 1.1)) + 0.04 * Math.sin(x * 5.7 - t * 0.8) + 0.03 * Math.sin(x * 11.3 + n * 2), w = W * (0.55 + 0.45 * Math.sin(x * 3.1 + t * 0.6 + n)), o = i * 6, z = z0 + jag;
+          arr[o] = x; arr[o + 1] = y - 0.003; arr[o + 2] = z - w; arr[o + 3] = x; arr[o + 4] = y - 0.003; arr[o + 5] = z + w; } S2.g.attributes.position.needsUpdate = true; S2.m.material.opacity = n ? 0.5 * gap : 0.9; }); }
+    return { tick }; }
   function create(scene, boxes) {
     const B = { SHORE, SAND0, SWIM_MAX, floorAt, t: 0, surgeA: 0 };
     const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1 }, o || {}));
@@ -73,9 +111,8 @@ window.PlayBeach = (() => {
     // 海：前のふちが寄せては返す。ふちに白い泡
     const wg = new THREE.PlaneGeometry(200, 120, 20, 40), wc = []; { const wp = wg.attributes.position, sh = new THREE.Color(0x8fe0e4), dp = new THREE.Color(0x2f7fa8), c = new THREE.Color(); for (let i = 0; i < wp.count; i++) { const d = 60 - wp.getY(i); c.copy(sh).lerp(dp, Math.min(1, d / 14)); wc.push(c.r, c.g, c.b); } wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3)); } /* 浅瀬は明るく、沖ほど濃い */
     const water = new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 0.74, depthWrite: false })); water.rotation.x = -Math.PI / 2; water.renderOrder = 3; scene.add(water);
-    const GN = 70, gg = new THREE.BufferGeometry(), gpos = new Float32Array(GN * 3), glint = []; for (let i = 0; i < GN; i++) glint.push({ x: (Math.random() - 0.5) * 40, z: SHORE + 1 + Math.random() * 22, ph: Math.random() * 7, sp: 0.6 + Math.random() }); gg.setAttribute('position', new THREE.BufferAttribute(gpos, 3));
-    const glints = new THREE.Points(gg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.13, transparent: true, opacity: 0.9, depthWrite: false })); glints.renderOrder = 5; scene.add(glints); /* 水面のきらきら */
-    const foam = new THREE.Mesh(new THREE.PlaneGeometry(200, 0.35), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false })); foam.rotation.x = -Math.PI / 2; foam.renderOrder = 4; scene.add(foam);
+
+    const lines = makeWaveLines(scene, B);
     B.waterZ = () => SHORE - 0.35 * Math.sin(B.t * 0.9) - B.surgeA * 1.6; /* 今の波のふち */
     B.surge = a => { B.surgeA = Math.max(B.surgeA, a || 1); }; /* 大きい波が来る */
     B.inSea = (z) => z > B.waterZ();
@@ -144,7 +181,7 @@ window.PlayBeach = (() => {
     B.turtles = T;
 
     const extras = makeExtras(scene, boxes, B, mat);
-    B.tick = dt => { B.t += dt; B.surgeA = Math.max(0, B.surgeA - dt * 0.45); const wz = B.waterZ(); water.position.set(0, 0.02 + 0.012 * Math.sin(B.t * 0.8), wz + 60); for (let i = 0; i < GN; i++) { const g = glint[i], v = Math.sin(B.t * g.sp * 2 + g.ph); gpos[i * 3] = g.x + Math.sin(B.t * 0.2 + g.ph) * 0.4; gpos[i * 3 + 1] = v > 0.75 ? 0.05 : -5; gpos[i * 3 + 2] = Math.max(g.z, wz + 0.8); } gg.attributes.position.needsUpdate = true; extras.tick(dt); foam.position.set(0, 0.025, wz + 0.1); foam.material.opacity = 0.55 + 0.35 * Math.sin(B.t * 1.8);
+    B.tick = dt => { B.t += dt; B.surgeA = Math.max(0, B.surgeA - dt * 0.45); const wz = B.waterZ(); water.position.set(0, 0.02 + 0.012 * Math.sin(B.t * 0.8), wz + 60); extras.tick(dt); lines.tick(dt, wz);
       crab.tick(dt); T.tick(dt);
       for (const f of frags) { f.t += dt; if (f.st === 'float') { f.m.position.set(f.x + Math.sin(f.t * 0.7) * 0.15, 0.08 + 0.04 * Math.sin(f.t * 2.2), f.z + Math.cos(f.t * 0.5) * 0.15); f.m.rotation.y = f.t * 1.5; f.m.scale.setScalar(1 + 0.25 * Math.max(0, Math.sin(f.t * 3))); }
         else if (f.st === 'fly') { f.k += dt * 2.5; const to = f.to(); f.m.position.lerp(new THREE.Vector3(to[0], to[1], to[2]), Math.min(1, dt * 8)); f.m.scale.setScalar(Math.max(0.01, 1 - f.k)); if (f.k >= 1) { f.st = 'gone'; f.m.visible = false; } } } };

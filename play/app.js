@@ -42,7 +42,7 @@
   function sprout() { const T = window.BoneTemplates, l = window.BoneStorage.loadWorks() || []; let w = l.find(x => x.id === 'pulu_story');
     if (!w || !T.puluSprouted(w.data)) { const now = Date.now(), d = T.puluSprout(T.data('pulu')); w = Object.assign(w || { id: 'pulu_story', created: now }, { name: 'プルプル', data: d, updated: now }); if (!l.includes(w)) l.unshift(w); window.BoneStorage.saveWorks(l); }
     LS.set('yuya_play_mate', w.id); useWork(w, true); skin.squash && skin.squash(2.2); }
-  function placeStart() { Object.assign(B.h, { x: 3, z: BE.SHORE + 30, y: -0.17, yaw: Math.PI, v: 0, vy: 0, st: 'ground', gest: null }); Object.assign(pen, { x: 0.8, z: BE.SHORE - 2.4, y: 0, yaw: 0, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = Math.PI; autoCam = true; camT.set(pen.x, 0.55, pen.z); } /* 始まりは浜：波打ち際で海の方を向いて立ってる */
+  function placeStart() { Object.assign(B.h, { x: 3, z: BE.SHORE + 30, y: -0.17, yaw: Math.PI, v: 0, vy: 0, st: 'ground', gest: null }); Object.assign(pen, { x: 0.8, z: BE.SHORE - 2.4, y: 0, yaw: 0, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = Math.PI; camPitch = 0.2; autoCam = true; camT.set(pen.x, 0.55, pen.z); } /* 始まりは浜：波打ち際で海の方を向いて立ってる */
   // 乗る／降りる（0.7m になってから）。乗ったら操作がプルプルに移る
   const rideBtn = document.getElementById('rideBtn'), growBtn = document.getElementById('growBtn');
   function canRide() { return phase === 'big' && !riding && !carrying && growT < 0 && B.h.st === 'ground' && Math.hypot(pen.x - B.h.x, pen.z - B.h.z) < B.radius + 1.1 && Math.abs(pen.y - B.h.y) < 0.4; }
@@ -124,6 +124,7 @@
       if (!riding && (bst === 'drift' || bst === 'wash' || bst === 'gather' || bst === 'swimBack' || bst === 'seaEdge')) { const k = bst === 'drift' ? 0 : bst === 'wash' ? 0.12 : 0.35; fx += (B.h.x - fx) * k; fz += (B.h.z - fz) * k; } /* 海の方：プルプルも画に入れる */
       if (tw) { const T = BE.turtles; fx = (fx + T.x) / 2; fz = (fz + T.z) / 2; } /* 観察：カメの方へ寄る */
       // 浜の出会いが終わって歩き出したら、カメラがゆっくり後ろへ回り込む（自分で回したら止める・草原に入ったら終わり）
+      BE.cam = cam; if (autoCam) camPitch += ((onBeach ? 0.2 : 0.42) - camPitch) * Math.min(1, dt * 1.5); /* 浜の出会いの間はカメラを起こして、水平線と沖を見せる */
       if (autoCam) { if (r.orbit.dx || r.orbit.dy) autoCam = false; else if (!onBeach && !riding && pen.v > 0.3) { const tg = pen.yaw + Math.PI, d = Math.atan2(Math.sin(tg - camYaw), Math.cos(tg - camYaw)); camYaw += d * Math.min(1, dt * 1.1); } if (!onBeach && pen.z < BE.SAND0 - 3) autoCam = false; }
       camT.lerp(new THREE.Vector3(fx, fy, fz), Math.min(1, dt * 6)); const cp = Math.cos(camPitch); const cd = camDist * (obs ? 0.6 : tw ? 0.75 : 1);
       camDz += (cd - camDz) * Math.min(1, dt * 3); cam.position.set(camT.x + Math.sin(camYaw) * cp * camDz, camT.y + Math.sin(camPitch) * camDz, camT.z + Math.cos(camYaw) * cp * camDz); cam.lookAt(camT);
