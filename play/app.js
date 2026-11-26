@@ -11,7 +11,8 @@
   let held = null, B = null, skin = null, skinKind = LS.get('yuya_play_skin2') || 'pulu', camYaw = 0, camPitch = 0.42, camDist = 0, camDz = 5.6, camT = new THREE.Vector3();
   // ---- 序盤：ペンギン（プレイヤー）とプルプル。phase＝small（0.4m・自分で動く）→ big（0.7m・乗れる）。乗ってる間だけプルプルを操作 ----
   const ST = window.PlayStory, pen = ST.penguin(scene, world), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
-  let mimB = 0, phase = 'small', riding = false, growT = -1, growFrom = 1;
+  let mimB = 0, phase = 'small', riding = false, growT = -1, growFrom = 1, gx = 1, gxT = 1, carrying = false, strainK = 0, autoCam = true, inYaw = Math.PI; /* gx＝かけらを集めて途中まで大きくなった分、carrying＝乗せてみてる最中（まだ操作は移らへん） */
+  const BE = world.beach;
   // ---- ハサミ（2本指でつまむ）とツタ ----
   let hang = null, grip = 0; const SW = world.swing, aimM = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false })); aimM.renderOrder = 9; aimM.visible = false; scene.add(aimM);
   const gripOf = pc => pc.pmax > 0.15 ? Math.max(0, Math.min(1, (pc.pmax - pc.open) / pc.pmax)) : 0; /* 開いてから閉じた深さ＝握る力 */
@@ -36,20 +37,26 @@
     const miss = ['walk', 'run', 'jump'].filter(s => !B.M[s]); if (miss.length) msg('この子はまだ「' + miss.map(s => ({ walk: '歩く', run: '走る', jump: '跳ぶ' })[s]).join('・') + '」がない（工房で作ってな）'); }
   function useSkin(k) { if (!window.PlaySkins[k]) k = 'pulu'; skinKind = k; LS.set('yuya_play_skin2', k); if (skin) { scene.remove(skin.g); skin.dispose(); } skin = window.PlaySkins[k](B); scene.add(skin.g); document.getElementById('skinBtn').textContent = '見た目：' + window.PlaySkins.list.find(x => x[0] === k)[1]; }
   function pickFirst() { const l = works(), id = LS.get('yuya_play_mate'); useWork(l.find(w => w.id === id) || l.sort((a, b) => (b.t || 0) - (a.t || 0))[0]); placeStart(); }
-  function placeStart() { Object.assign(B.h, { x: -2.25, z: 1.0, y: 0, yaw: Math.atan2(-0.35, 0.2), v: 0, vy: 0, st: 'ground', gest: null }); Object.assign(pen, { x: 1.0, z: 3.6, y: 0, yaw: Math.PI, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = 0; camT.set(0, 0.5, 3); }
+  function placeStart() { Object.assign(B.h, { x: 3, z: BE.SHORE + 30, y: -0.17, yaw: Math.PI, v: 0, vy: 0, st: 'ground', gest: null }); Object.assign(pen, { x: 0.8, z: BE.SHORE - 2.4, y: 0, yaw: 0, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = Math.PI; autoCam = true; camT.set(pen.x, 0.55, pen.z); } /* 始まりは浜：波打ち際で海の方を向いて立ってる */
   // 乗る／降りる（0.7m になってから）。乗ったら操作がプルプルに移る
   const rideBtn = document.getElementById('rideBtn'), growBtn = document.getElementById('growBtn');
-  function canRide() { return phase === 'big' && !riding && growT < 0 && B.h.st === 'ground' && Math.hypot(pen.x - B.h.x, pen.z - B.h.z) < B.radius + 1.1 && Math.abs(pen.y - B.h.y) < 0.4; }
+  function canRide() { return phase === 'big' && !riding && !carrying && growT < 0 && B.h.st === 'ground' && Math.hypot(pen.x - B.h.x, pen.z - B.h.z) < B.radius + 1.1 && Math.abs(pen.y - B.h.y) < 0.4; }
   function canDrop() { return riding && B.h.st === 'ground'; }
   function setRide(on) { riding = on; pen.seated = on; document.body.classList.toggle('riding', on); if (on) { brain.S.emo = null; requestAnimationFrame(() => { dispatchEvent(new Event('resize')); pad.use(B.work.id, pad.moves); }); } /* 隠れてる間に大きさ0になったパッドを測り直す */
-    if (!on) { const a = B.h.yaw + Math.PI / 2; pen.x = B.h.x + Math.sin(a) * (B.radius + 0.45); pen.z = B.h.z + Math.cos(a) * (B.radius + 0.45); pen.y = world.groundAt(pen.x, pen.z, B.h.y + 0.25); pen.yaw = B.h.yaw; pen.v = 0; brain.S.st = 'follow'; msg('降りた'); }
+    if (!on) { dismount(); brain.S.st = 'follow'; msg('降りた'); }
     else msg(matchMedia('(pointer: coarse)').matches ? '乗った！ ここからはプルプルを動かせる（右のパッドで跳ぶ・振る・掴む）' : '乗った！ ここからはプルプルを動かせる（Space 跳ぶ・J 振る・K 掴む・Q 降りる）'); }
-  const toggleRide = () => { if (riding ? canDrop() : canRide()) setRide(!riding); };
+  function dismount() { pen.seated = false; const a = B.h.yaw + Math.PI / 2; pen.x = B.h.x + Math.sin(a) * (B.radius + 0.45); pen.z = B.h.z + Math.cos(a) * (B.radius + 0.45); pen.y = Math.max(0, world.groundAt(pen.x, pen.z, B.h.y + 0.25)); pen.yaw = B.h.yaw; pen.v = 0; }
+  // 乗る：はじめは「乗せてみる」（潰れずに立てるか）。立てたら、ここから操作できる
+  const toggleRide = () => { if (!riding && canRide() && !brain.S.carryOK) { carrying = true; pen.seated = true; return; } if (riding ? canDrop() : canRide()) setRide(!riding); };
+  function carryDone(ok) { carrying = false; strainK = 0; if (ok) setRide(true); else dismount(); }
   rideBtn.onclick = toggleRide; addEventListener('keydown', e => { if (e.key.toLowerCase() === 'q' && !e.repeat) toggleRide(); });
   // （仮）願いを叶える：観察→工房の1周ができるまでの代わり。0.7m の乗せられる体になる
-  function grant() { if (phase !== 'small') return; phase = 'big'; const w = B.work; useWork(w, true); brain.S.st = 'grow'; growT = 0; growFrom = ST.SIZE.small / ST.SIZE.big; bub.show(null); msg('プルプルの体が、ぐーっと大きくなっていく…'); }
+  function grant() { if (phase !== 'small') return; phase = 'big'; const w = B.work; useWork(w, true); brain.S.st = 'grow'; growT = 0; growFrom = ST.SIZE.small / ST.SIZE.big; gx = gxT = 1; bub.show(null); msg('プルプルの体が、ぐーっと大きくなっていく…'); }
+  // 光のかけらを集めて大きくなる：途中は見た目だけ（f＝集めた割合）、全部集めて浜に戻ったら 0.7m の体になる
+  function growPart(f) { gxT = (ST.SIZE.small + (ST.SIZE.big - ST.SIZE.small) * f) / ST.SIZE.small; skin.squash && skin.squash(1.6); }
+  function growDone() { if (phase !== 'small') return; const cur = gx * ST.SIZE.small / ST.SIZE.big; phase = 'big'; useWork(B.work, true); gx = gxT = 1; growT = 0; growFrom = cur; brain.S.st = 'grow'; brain.S.afterGrow = 'invite'; }
   growBtn.onclick = grant;
-  document.getElementById('storyBtn').onclick = () => { if (riding) setRide(false); phase = 'small'; brain.reset(); useWork(B.work, false); placeStart(); bub.show(null); msg('最初から'); };
+  document.getElementById('storyBtn').onclick = () => { if (riding) setRide(false); carrying = false; pen.seated = false; gx = gxT = 1; strainK = 0; BE.resetStory(); phase = 'small'; brain.reset(); useWork(B.work, false); placeStart(); bub.show(null); msg('最初から'); };
   document.getElementById('mateBtn').onclick = () => { const l = works(), i = l.findIndex(w => w.id === (B && B.work.id)); useWork(l[(i + 1) % l.length], true); };
   document.getElementById('skinBtn').onclick = () => { const L = window.PlaySkins.list, i = L.findIndex(x => x[0] === skinKind); useSkin(L[(i + 1) % L.length][0]); };
   document.getElementById('toolBtn').onclick = () => { try { parent.__openTool && parent.__openTool(); } catch (_) {} };
@@ -71,16 +78,19 @@
       last = now; renderer.render(scene, cam); requestAnimationFrame(loop); } }
   function frame(now) { const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
     if (B) { const r = ctl.read(); camYaw -= r.orbit.dx * 0.006; camPitch = Math.max(0.05, Math.min(1.2, camPitch + r.orbit.dy * 0.004)); camDist = Math.max(2, Math.min(30, camDist * r.orbit.zoom));
-      const sy = Math.sin(camYaw), cy = Math.cos(camYaw), mx = -sy * r.fz + cy * r.fx, mz = -cy * r.fz - sy * r.fx; /* カメラから見た前後左右 → 世界の向き */
+      if (Math.abs(r.fx) + Math.abs(r.fz) < 0.05) inYaw = camYaw; /* 倒してる間は、倒し始めた時のカメラの向きで進む（カメラが回っても進む向きがブレへん） */
+      const sy = Math.sin(inYaw), cy = Math.cos(inYaw), mx = -sy * r.fz + cy * r.fx, mz = -cy * r.fz - sy * r.fx; /* カメラから見た前後左右 → 世界の向き */
       const a = pad.read(), air = B.h.st === 'jair' || B.h.st === 'air' || B.h.st === 'flap';
       const pc = a.pinch || {}; grip = pc.active ? gripOf(pc) : 0;
-      if (riding && hang) hangStep(dt, mx, mz, pc);
+      const ctxB = { riding, phase, squash: k => skin.squash && skin.squash(k), glow: a => skin.glow && skin.glow(a), grow: growPart, growDone, carryDone, push: (dx, dz) => pen.nudge(dx, dz, world), lift: (k, tr, raise) => { strainK = k == null ? 0 : k; skin.strain && skin.strain(k, tr); pen.raise = raise || 0; } };
+      if (carrying) brain.tick(B, pen, dt, Object.assign(ctxB, { carry: true }));
+      else if (riding && hang) hangStep(dt, mx, mz, pc);
       else if (riding) { const act = pc.active ? { move: 'grab', active: true, p: pc.open, pmax: pc.pmax, down: pc.down } : a; /* つまんでる間は、ハサミのコマを指の開きで動かす */
         B.step(dt, { mx, mz, walk: r.walk, press: r.press || (air && a.airTap && !pc.active), up: r.up, held: r.held, act, keySwing: r.keySwing, keyGrab: r.keyGrab }, world);
         if (pc.active && grip >= 0.45 && SW) { const q = aimAt(pc), n = SW.near(q); if (n.d < 0.4) startHang(n); } }
       else { pen.step(dt, mx, mz, r.walk, world); /* プレイヤーはペンギン。プルプルは自分で動く */
-        const inp = brain.tick(B, pen, dt, { riding, phase, squash: k => skin.squash && skin.squash(k), push: (dx, dz) => pen.nudge(dx, dz, world), lift: (k, tr, raise) => { skin.strain && skin.strain(k, tr); pen.raise = raise || 0; } }); /* 言葉では説明しない */
-        if (inp && (brain.S.st === 'roam' || /^meet|intro/.test(brain.S.st))) { const dx = B.h.x - pen.x, dz = B.h.z - pen.z, d = Math.hypot(dx, dz), m = B.radius + pen.r + 0.05; if (d < m && brain.S.r !== 'doze') { const k = (m - d) / Math.max(d, 1e-3); B.h.x += dx * k; B.h.z += dz * k; } } /* 重ならへん（うとうとの時だけくっつく） */
+        const inp = brain.tick(B, pen, dt, ctxB); /* 言葉では説明しない */
+        if (inp && (brain.S.st === 'roam' || /^(wait|shy|tag|crabEye|guide|turtleWatch|invite|follow)$/.test(brain.S.st))) { const dx = B.h.x - pen.x, dz = B.h.z - pen.z, d = Math.hypot(dx, dz), m = B.radius + pen.r + 0.05; if (d < m && brain.S.r !== 'doze') { const k = (m - d) / Math.max(d, 1e-3); B.h.x += dx * k; B.h.z += dz * k; } } /* 重ならへん（うとうとの時だけくっつく） */
         if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
       world.tick(dt);
       const v = B.view(); skin.setPose(v); let ev = null; while (B.events.length) { const e = B.events.shift(); ev = e; if (e && e.land != null) shownLast = Object.assign({}, B.last || {}, { rise: e.rise }); }
@@ -92,19 +102,25 @@
         else if (q > 0.78) { world.crush(held); held = null; feel = '力入れすぎて潰れた…'; feelT = 2.5; } else if (q < 0.3) { world.drop(held); held = null; } }
       else if (held) { world.drop(held); held = null; }
       if (held) { const hp = aimP || head; held.m.position.set(hp[0], hp[1] - 0.05, hp[2]); }
-      let gm = 1; if (growT >= 0) { growT += dt; const u = Math.min(1, growT / 1.4); gm = growFrom + (1 - growFrom) * (1 - Math.pow(1 - u, 3)) + Math.sin(growT * 18) * 0.06 * (1 - u); if (u >= 1) { growT = -1; brain.S.st = 'follow'; skin.squash && skin.squash(2.4); msg('乗せられる体になった！ 近くで「乗る」（Q）'); } }
-      const tilt = brain.S.tilt; skin.update(dt, v, ev); mimB += ((brain.S.mimic && !riding && B.h.v > 0.15 ? 1 : 0) - mimB) * Math.min(1, dt * 8); const hopY = mimB * Math.pow(Math.abs(Math.sin(pen.ph)), 0.7) * 0.07 * (B.Hm / 0.4); /* マネ：ペンギンと同じリズムで跳ねる */ skin.g.position.set(v.x, v.y + B.radius * 0.6 * Math.max(0, tilt) + hopY, v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
+      let gm = 1; if (growT >= 0) { growT += dt; const u = Math.min(1, growT / 1.4); gm = growFrom + (1 - growFrom) * (1 - Math.pow(1 - u, 3)) + Math.sin(growT * 18) * 0.06 * (1 - u); if (u >= 1) { growT = -1; const nx = brain.S.afterGrow; brain.S.st = nx || 'follow'; brain.S.afterGrow = null; brain.S.t = 0; skin.squash && skin.squash(2.4); if (!nx) msg('乗せられる体になった！ 近くで「乗る」（Q）'); } }
+      gx += (gxT - gx) * Math.min(1, dt * 4);
+      const tilt = brain.S.tilt; skin.update(dt, v, ev); mimB += ((brain.S.mimic && !riding && B.h.v > 0.15 ? 1 : 0) - mimB) * Math.min(1, dt * 8); const hopY = mimB * Math.pow(Math.abs(Math.sin(pen.ph)), 0.7) * 0.07 * (B.Hm / 0.4); /* マネ：ペンギンと同じリズムで跳ねる */ skin.g.position.set(v.x, v.y + B.radius * 0.6 * Math.max(0, tilt) + hopY, v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm * gx); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
       // ペンギン：乗ってる時はプルプルの背中に座る
-      if (riding) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06; /* 背中（胴の骨の高さ）に座る */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } pen.place();
+      if (riding || carrying) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06 + strainK * B.Hm * 0.5; /* 背中（胴の骨の高さ）に座る。乗せてみてる時は沈む */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } pen.place();
       // 吹き出し：プルプルの頭の上
       bub.show(null); /* 吹き出しは出さない（動きで伝える） */ bub.tick(dt); { const p = proj(new THREE.Vector3(v.x, v.y + B.Hm * gm + 0.18, v.z)); bub.place(p.x, p.y, p.z < 1); }
-      growBtn.style.display = phase === 'small' && brain.S.wished ? 'block' : 'none';
+      growBtn.style.display = 'none'; /* 仮ボタンは引退（本番の叶え方：カメ→かけら→工房） */
       rideBtn.style.display = (riding ? canDrop() : canRide()) ? 'block' : 'none'; rideBtn.textContent = riding ? '⤵ 降りる' : '🫧 乗る';
       // カメラ：後ろからついていく（歩いてる間はペンギン、乗ったらプルプル）
-      const obs = !riding && brain.S.st === 'observe'; world.crab.observe(obs); document.getElementById('toolBtn').classList.toggle('call', !riding && brain.S.st === 'wantTool');
+      const obs = !riding && brain.S.st === 'observe'; world.crab.observe(obs); document.getElementById('toolBtn').classList.toggle('call', !riding && brain.S.st === 'wantTool'); const tw = !riding && brain.S.st === 'turtleWatch'; BE.turtles.observe(tw);
       let fx = riding ? B.h.x : pen.x, fz = riding ? B.h.z : pen.z, fy = riding ? B.h.y + B.cR[1] * B.size + 0.75 : pen.y + 0.55;
       if (obs) { const c = world.crab; fx = (fx + c.x * 2) / 3; fz = (fz + c.z * 2) / 3; fy = Math.max(fy, c.y + 0.3); } /* 観察：カニの方へ寄る */
-      camT.lerp(new THREE.Vector3(fx, fy, fz), Math.min(1, dt * 6)); const cp = Math.cos(camPitch); const cd = camDist * (obs ? 0.6 : 1);
+      const bst = brain.S.st, onBeach = /^(drift|wash|lie|freeze|flee|scared|wait|shy|poke)$/.test(bst);
+      if (!riding && (bst === 'drift' || bst === 'wash' || bst === 'gather' || bst === 'swimBack' || bst === 'seaEdge')) { const k = bst === 'drift' ? 0 : bst === 'wash' ? 0.12 : 0.35; fx += (B.h.x - fx) * k; fz += (B.h.z - fz) * k; } /* 海の方：プルプルも画に入れる */
+      if (tw) { const T = BE.turtles; fx = (fx + T.x) / 2; fz = (fz + T.z) / 2; } /* 観察：カメの方へ寄る */
+      // 浜の出会いが終わって歩き出したら、カメラがゆっくり後ろへ回り込む（自分で回したら止める・草原に入ったら終わり）
+      if (autoCam) { if (r.orbit.dx || r.orbit.dy) autoCam = false; else if (!onBeach && !riding && pen.v > 0.3) { const tg = pen.yaw + Math.PI, d = Math.atan2(Math.sin(tg - camYaw), Math.cos(tg - camYaw)); camYaw += d * Math.min(1, dt * 1.1); } if (!onBeach && pen.z < BE.SAND0 - 3) autoCam = false; }
+      camT.lerp(new THREE.Vector3(fx, fy, fz), Math.min(1, dt * 6)); const cp = Math.cos(camPitch); const cd = camDist * (obs ? 0.6 : tw ? 0.75 : 1);
       camDz += (cd - camDz) * Math.min(1, dt * 3); cam.position.set(camT.x + Math.sin(camYaw) * cp * camDz, camT.y + Math.sin(camPitch) * camDz, camT.z + Math.cos(camYaw) * cp * camDz); cam.lookAt(camT);
       // 表示：溜め・前のジャンプ
       const h = B.h, rows = []; if (h.st === 'charge' || h.st === 'takeoff') rows.push('溜め ' + Math.round(h.c * 100) + '%'); if (h.st === 'grab') rows.push('力 ' + Math.round(h.grip * 100) + '%（ちょうど 45〜78%）');
@@ -117,5 +133,5 @@
   pickFirst(); requestAnimationFrame(loop);
   msg(matchMedia('(pointer: coarse)').matches ? '左をなぞってペンギンを歩かせる' : 'WASDでペンギンを歩かせる');
   // 工房から戻った時：作品を読み直す（形や動きが変わってるかも）
-  window.__play = { refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
+  window.__play = { body: () => B, refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
 })();

@@ -55,6 +55,6 @@ window.PlaySkins = (() => {
       wob.rotation.z = Math.sin(t * 47) * 0.06 * trem; wob.rotation.x = Math.sin(t * 39 + 1) * 0.04 * trem; kv += (-(k - target) * 140 - kv * 9) * dt; k += kv * dt; k = Math.max(-0.45, Math.min(0.5, k));
       const br = 0.015 * Math.sin(t * 2.4); wob.scale.set(1 - k * 0.5 - br, 1 + k + br, 1 - k * 0.5 - br); /* 息をするみたいに少しふくらむ */
       nucs.forEach((m, n) => { const s = joints[n].r * (1 + 0.08 * Math.sin(t * 3 + n * 1.7)); m.scale.setScalar(s); }); }
-    return { g, inner, setPose, update, squash(a) { kv -= a; }, strain(v, tr) { sv = v; trem = v == null ? 0 : tr; if (v == null) kv -= 4; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); jelly.dispose(); nucMat.dispose(); nucGeo.dispose(); } }; }
+    return { g, inner, setPose, update, squash(a) { kv -= a; }, glow(a) { nucMat.emissiveIntensity = 1 + Math.max(0, a) * 3; }, strain(v, tr) { sv = v; trem = v == null ? 0 : tr; if (v == null) kv -= 4; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); jelly.dispose(); nucMat.dispose(); nucGeo.dispose(); } }; }
   return { list: [['pulu', 'プルプル'], ['normal', 'ふつう'], ['puni', 'プニプニ']], normal, puni, pulu };
 })();

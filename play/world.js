@@ -4,9 +4,9 @@ window.PlayWorld = (() => {
     scene.background = new THREE.Color(0xcfe3e8); scene.fog = new THREE.Fog(0xcfe3e8, 30, 120);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x8aa070, 0.9)); const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(12, 20, 8); scene.add(sun);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), new THREE.MeshStandardMaterial({ color: 0xa9c98a, roughness: 1 })); ground.rotation.x = -Math.PI / 2; scene.add(ground);
-    const grid = new THREE.GridHelper(160, 80, 0x98b87a, 0x98b87a); grid.position.y = 0.003; grid.material.transparent = true; grid.material.opacity = 0.5; scene.add(grid);
+    const grid = new THREE.GridHelper(160, 80, 0x98b87a, 0x98b87a); grid.position.set(0, 0.003, 4.5 - 80); /* 草原だけ（浜と海にはマス目なし） */ grid.material.transparent = true; grid.material.opacity = 0.5; scene.add(grid);
     // 草の点々（速さが分かるように）
-    { const n = 900, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - 0.5) * 140; pos[i * 3 + 1] = 0.04; pos[i * 3 + 2] = (Math.random() - 0.5) * 140; } const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x6f9a55, size: 0.12 }))); }
+    { const n = 900, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - 0.5) * 140; pos[i * 3 + 1] = 0.04; pos[i * 3 + 2] = (Math.random() - 0.5) * 140; if (pos[i * 3 + 2] > 4.2) pos[i * 3 + 1] = -5; /* 浜には草なし */ } const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x6f9a55, size: 0.12 }))); }
     const boxes = [], rockMat = new THREE.MeshStandardMaterial({ color: 0xb59a78, roughness: 0.95, flatShading: true }), topMat = new THREE.MeshStandardMaterial({ color: 0x9cc07c, roughness: 1 });
     function box(x, z, w, d, top, label) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, top, d), rockMat); m.position.set(x, top / 2, z); scene.add(m);
       const t = new THREE.Mesh(new THREE.PlaneGeometry(w, d), topMat); t.rotation.x = -Math.PI / 2; t.position.set(x, top + 0.004, z); scene.add(t);
@@ -14,6 +14,7 @@ window.PlayWorld = (() => {
     // 前に段々：0.6 → 1.2 → 1.75（崖と同じ）→ 2.5。横に低い岩がいくつか
     box(0, -7, 4, 3, 0.6, '0.6m'); box(0, -11, 4, 3, 1.2, '1.2m'); box(0, -15, 4, 3, 1.75, '1.75m'); box(0, -19.5, 5, 4, 2.5, '2.5m');
     const crabRock = box(-4.2, -3.2, 2.4, 2, 1.2, 'カニの岩'); /* 跳んでも届かへん。カニは前の面（スタート側）を登る */ box(-7.6, -4, 2.2, 2.2, 0.35); box(-9, -9, 2.6, 2.6, 0.9); box(7, -5, 3, 2, 0.5); box(9, -10, 2.4, 2.4, 1.4);
+    const beach = window.PlayBeach.create(scene, boxes); /* 浜（スタート地点の後ろ）と海 */
     // ---- ツタの壁：背の高い岩2つのすき間をツタがふさいでる。速く振って当てたら切れる（遅いとペチッ）----
     box(-13.25, -14, 5.5, 2, 3); box(-4.75, -14, 5.5, 2, 3);
     const vineG = new THREE.Group(), vineMat = new THREE.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 0.9, flatShading: true }); for (let i = 0; i < 9; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 3, 5), vineMat); c.position.set(-10.3 + i * 0.32 + Math.random() * 0.1, 1.5, -14 + (Math.random() - 0.5) * 0.3); c.rotation.z = (Math.random() - 0.5) * 0.12; vineG.add(c); } scene.add(vineG);
@@ -27,7 +28,7 @@ window.PlayWorld = (() => {
     const fruitNear = (p, r, ry) => { let best = null, bd = r; for (const f of fruits) if (f.st === 'ground') { const q = f.m.position, d = Math.hypot(q.x - p[0], q.z - p[2]); if (d < bd && Math.abs(q.y - p[1]) < (ry || r)) { bd = d; best = f; } } return best; }; /* 横の近さ＋高さの差 */
     function crush(f) { f.st = 'gone'; f.t = 6; f.m.visible = false; const sp = new THREE.Mesh(new THREE.CircleGeometry(0.28, 12), splatMat); sp.rotation.x = -Math.PI / 2; sp.position.set(f.m.position.x, groundAt(f.m.position.x, f.m.position.z, f.m.position.y + 0.3) + 0.01, f.m.position.z); scene.add(sp); f.splat = sp; }
     function drop(f) { f.st = 'ground'; const p = f.m.position; p.y = groundAt(p.x, p.z, p.y) + 0.17; }
-    function tick(dt) { tickInterests(dt); crab.tick(dt); for (const c of vineG.children) if (c.userData.fall) { c.rotation.x += dt * 2.5; c.position.y -= dt * 1.5; c.scale.multiplyScalar(1 - dt * 0.8); if (c.position.y < -1) { c.visible = false; c.userData.fall = 0; } }
+    function tick(dt) { tickInterests(dt); crab.tick(dt); beach.tick(dt); for (const c of vineG.children) if (c.userData.fall) { c.rotation.x += dt * 2.5; c.position.y -= dt * 1.5; c.scale.multiplyScalar(1 - dt * 0.8); if (c.position.y < -1) { c.visible = false; c.userData.fall = 0; } }
       if (vineG.userData.shake > 0) { vineG.userData.shake -= dt; vineG.position.x = Math.sin(vineG.userData.shake * 60) * 0.04 * vineG.userData.shake; }
       for (const f of fruits) if (f.st === 'gone') { f.t -= dt; if (f.t <= 0) { if (f.splat) { scene.remove(f.splat); f.splat = null; } f.st = 'ground'; f.m.visible = true; f.m.position.set(f.home[0], 0.17, f.home[1]); } } }
     // ---- ぶら下がれるツタ：木の枝から1本垂れてる。ハサミで掴むとぶら下がって揺れる。奥の 1.4m の岩へ飛び移れる ----
@@ -51,6 +52,7 @@ window.PlayWorld = (() => {
     { const m = new THREE.Mesh(new THREE.CircleGeometry(0.55, 14), new THREE.MeshStandardMaterial({ color: 0x7fb6d6, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.8 })); m.rotation.x = -Math.PI / 2; m.position.set(4.2, 0.01, 1.8); m.scale.set(1.3, 1, 1); scene.add(m); interests.push({ kind: 'puddle', x: 4.2, z: 1.8, g: m }); }
     const bfly = []; for (const [x, z, c] of [[-1, -1.5, 0xffe066], [2.5, -4.5, 0xff9ad5]]) { const g = new THREE.Group(), wm = new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }), w1 = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.06), wm), w2 = w1.clone(); w1.position.x = 0.035; w2.position.x = -0.035; g.add(w1, w2); g.position.set(x, 0.5, z); scene.add(g);
       const it = { kind: 'bfly', x, z, g, w1, w2, home: [x, z], t: Math.random() * 10 }; bfly.push(it); interests.push(it); }
+    for (const it of beach.interests) interests.push(it);
     for (const f of fruits) interests.push({ kind: 'fruit', get x() { return f.m.position.x; }, get z() { return f.m.position.z; }, f });
     function tickInterests(dt) { for (const b of bfly) { b.t += dt; b.x = b.home[0] + Math.sin(b.t * 0.37) * 2.2 + Math.sin(b.t * 1.3) * 0.3; b.z = b.home[1] + Math.sin(b.t * 0.23 + 1) * 1.8; b.g.position.set(b.x, 0.45 + 0.2 * Math.sin(b.t * 2.1), b.z); b.g.rotation.y = b.t * 0.5; const fl = Math.sin(b.t * 22) * 0.9; b.w1.rotation.y = fl; b.w2.rotation.y = -fl; }
       for (const it of interests) if (it.kind === 'flower') it.g.rotation.z = Math.sin(performance.now() / 900 + it.x) * 0.05; }
@@ -90,6 +92,6 @@ window.PlayWorld = (() => {
       return C; })();
     // ある場所の地面の高さ（その高さ y より下にある一番高い面）
     function groundAt(x, z, y) { let g = 0; for (const b of boxes) if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.top <= y && b.top > g) g = b.top; return g; }
-    return { boxes, groundAt, strike, fruitNear, crush, drop, tick, fruits, swing, interests, crab, crabRock }; }
+    return { beach, boxes, groundAt, strike, fruitNear, crush, drop, tick, fruits, swing, interests, crab, crabRock }; }
   return { create };
 })();
