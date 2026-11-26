@@ -13,7 +13,8 @@
   // ---- 序盤：ペンギン（プレイヤー）とプルプル。phase＝small（0.4m・自分で動く）→ big（0.7m・乗れる）。乗ってる間だけプルプルを操作 ----
   const ST = window.PlayStory, pen = ST.penguin(scene, world), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
   let mimB = 0, phase = 'small', riding = false, growT = -1, growFrom = 1, gx = 1, gxT = 1, carrying = false, strainK = 0, autoCam = true, inYaw = Math.PI; /* gx＝かけらを集めて途中まで大きくなった分、carrying＝乗せてみてる最中（まだ操作は移らへん） */
-  const BE = world.beach;
+  const BE = world.beach; try { window.PlayMetal && window.PlayMetal.init(renderer); } catch (_) {}
+  { const mb = document.getElementById('metalBtn'), lab = () => { mb.textContent = '金属：' + (window.PlayMetal && window.PlayMetal.mode === 'scene' ? '景色' : '白黒'); }; if (mb) { lab(); mb.onclick = () => { window.PlayMetal && window.PlayMetal.toggle(); lab(); }; } } /* 映り込みの見比べ */
   // ---- ハサミ（2本指でつまむ）とツタ ----
   let hang = null, grip = 0; const SW = world.swing, aimM = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false })); aimM.renderOrder = 9; aimM.visible = false; scene.add(aimM);
   const gripOf = pc => pc.pmax > 0.15 ? Math.max(0, Math.min(1, (pc.pmax - pc.open) / pc.pmax)) : 0; /* 開いてから閉じた深さ＝握る力 */
@@ -42,6 +43,12 @@
   function sprout() { const T = window.BoneTemplates, l = window.BoneStorage.loadWorks() || []; let w = l.find(x => x.id === 'pulu_story');
     if (!w || !T.puluSprouted(w.data)) { const now = Date.now(), d = T.puluSprout(T.data('pulu')); w = Object.assign(w || { id: 'pulu_story', created: now }, { name: 'プルプル', data: d, updated: now }); if (!l.includes(w)) l.unshift(w); window.BoneStorage.saveWorks(l); }
     LS.set('yuya_play_mate', w.id); useWork(w, true); skin.squash && skin.squash(2.2); }
+  // ---- 地面に置いてあるもの：すり抜けへん。実・石・貝がらは押されて転がる、花はプルプルの方がよける ----
+  function solids() { const pr = B.radius * (B.Hm ? 1 : 1); for (const it of world.interests || []) { const mesh = it.g || it.m || (it.f && it.f.m); if (!mesh) continue; if (it.kind === 'bfly' || it.kind === 'puddle') continue; if (mesh.position.y > 0.25) continue; /* 木になってる実は別 */
+      const roll = it.kind === 'stone' || it.kind === 'fruit', r0 = it.kind === 'fruit' ? 0.07 : it.kind === 'flower' ? 0.08 : 0.06;
+      for (const who of riding || carrying ? ['pulu'] : ['pulu', 'pen']) { const px = who === 'pen' ? pen.x : B.h.x, pz = who === 'pen' ? pen.z : B.h.z, rr = (who === 'pen' ? pen.r : pr) + r0, dx = mesh.position.x - px, dz = mesh.position.z - pz, d = Math.hypot(dx, dz); if (d >= rr || d < 1e-4) continue; const k = (rr - d) / d;
+        if (roll) { mesh.position.x += dx * k; mesh.position.z += dz * k; mesh.rotation.x += dz * k * 8; mesh.rotation.z -= dx * k * 8; if (typeof it.x === 'number' && !Object.getOwnPropertyDescriptor(it, 'x').get) { it.x = mesh.position.x; it.z = mesh.position.z; } }
+        else if (who === 'pulu' && !riding) { B.h.x -= dx * k; B.h.z -= dz * k; } } } }
   function placeStart() { Object.assign(B.h, { x: 3, z: BE.SHORE + 30, y: -0.17, yaw: Math.PI, v: 0, vy: 0, st: 'ground', gest: null }); Object.assign(pen, { x: 0.8, z: BE.SHORE - 2.4, y: 0, yaw: 0, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = Math.PI; camPitch = 0.2; autoCam = true; camT.set(pen.x, 0.55, pen.z); } /* 始まりは浜：波打ち際で海の方を向いて立ってる */
   // 乗る／降りる（0.7m になってから）。乗ったら操作がプルプルに移る
   const rideBtn = document.getElementById('rideBtn'), growBtn = document.getElementById('growBtn');
@@ -95,8 +102,9 @@
         if (pc.active && grip >= 0.45 && SW) { const q = aimAt(pc), n = SW.near(q); if (n.d < 0.4) startHang(n); } }
       else { pen.step(dt, mx, mz, r.walk, world); /* プレイヤーはペンギン。プルプルは自分で動く */
         const inp = brain.tick(B, pen, dt, ctxB); /* 言葉では説明しない */
-        if (inp && (brain.S.st === 'roam' || /^(wait|shy|tag|crabEye|guide|turtleWatch|invite|follow)$/.test(brain.S.st))) { const dx = B.h.x - pen.x, dz = B.h.z - pen.z, d = Math.hypot(dx, dz), m = B.radius + pen.r + 0.05; if (d < m && brain.S.r !== 'doze') { const k = (m - d) / Math.max(d, 1e-3); B.h.x += dx * k; B.h.z += dz * k; } } /* 重ならへん（うとうとの時だけくっつく） */
-        if (inp) B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world); }
+        if (inp) { const dx = B.h.x - pen.x, dz = B.h.z - pen.z, d = Math.hypot(dx, dz), m = B.radius + pen.r + 0.05; if (d < m && brain.S.r !== 'doze') { const k = (m - d) / Math.max(d, 1e-3); B.h.x += dx * k; B.h.z += dz * k; } } /* 重ならへん（うとうとの時だけくっつく） */
+        if (inp) { B.step(dt, { mx: inp.mx, mz: inp.mz, walk: inp.walk, press: !!inp.press, up: false, held: false, act: {}, keySwing: false, keyGrab: false }, world);
+          if (B.h.st === 'ground' && B.h.y < 0.05) { const lim = Math.min(BE.SHORE - 0.3, BE.waterZ() - 0.15); if (B.h.z > lim) B.h.z += (lim - B.h.z) * Math.min(1, dt * 12); } } } /* 自分で歩いてる時は海に入らへん（入るのはかけら集めの泳ぎだけ） */
       world.tick(dt);
       const v = B.view(); skin.setPose(v); let ev = null; while (B.events.length) { const e = B.events.shift(); ev = e; if (e && e.land != null) shownLast = Object.assign({}, B.last || {}, { rise: e.rise }); }
       // 振る・掴む：口（頭の先）のまわりで当たり・掴みを見る
@@ -111,7 +119,7 @@
       gx += (gxT - gx) * Math.min(1, dt * 4);
       const tilt = brain.S.tilt; skin.update(dt, v, ev); mimB += ((brain.S.mimic && !riding && B.h.v > 0.15 ? 1 : 0) - mimB) * Math.min(1, dt * 8); const hopY = mimB * Math.pow(Math.abs(Math.sin(pen.ph)), 0.7) * 0.07 * (B.Hm / 0.4); /* マネ：ペンギンと同じリズムで跳ねる */ skin.g.position.set(v.x, v.y + B.radius * 0.6 * Math.max(0, tilt) + hopY, v.z); skin.g.rotation.order = 'YXZ'; skin.g.rotation.y = v.yaw; skin.g.rotation.x = -tilt; skin.g.scale.setScalar(v.size * gm * gx); skin.inner.position.set(-v.ref[0], -v.ref[1], -v.ref[2]);
       // ペンギン：乗ってる時はプルプルの背中に座る
-      if (riding || carrying) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06 + strainK * B.Hm * 0.5; /* 背中（胴の骨の高さ）に座る。乗せてみてる時は沈む */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } pen.place(); if (!riding && !carrying) BE.track('pen', pen.x, pen.z); BE.track('pulu', v.x, v.z, (B.Hm || 0.4) / 0.4); /* 砂の足跡 */
+      if (riding || carrying) { pen.x = v.x; pen.z = v.z; pen.y = v.y + B.cR[1] * B.size * gm + 0.06 + strainK * B.Hm * 0.5; /* 背中（胴の骨の高さ）に座る。乗せてみてる時は沈む */ pen.yaw = v.yaw; pen.v = 0; pen.pose(dt, true); } solids(); pen.place(); if (!riding && !carrying) BE.track('pen', pen.x, pen.z); BE.track('pulu', v.x, v.z, (B.Hm || 0.4) / 0.4); /* 砂の足跡 */
       // 吹き出し：プルプルの頭の上
       bub.show(null); /* 吹き出しは出さない（動きで伝える） */ bub.tick(dt); { const p = proj(new THREE.Vector3(v.x, v.y + B.Hm * gm + 0.18, v.z)); bub.place(p.x, p.y, p.z < 1); }
       growBtn.style.display = 'none'; /* 仮ボタンは引退（本番の叶え方：カメ→かけら→工房） */
@@ -139,5 +147,5 @@
   pickFirst(); requestAnimationFrame(loop);
   msg(matchMedia('(pointer: coarse)').matches ? '左をなぞってペンギンを歩かせる' : 'WASDでペンギンを歩かせる');
   // 工房から戻った時：作品を読み直す（形や動きが変わってるかも）
-  window.__play = { body: () => B, camYaw: y => { camYaw = y; autoCam = false; }, refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
+  window.__play = { body: () => B, camYaw: y => { camYaw = y; autoCam = false; }, camDist: d => { camDist = d; }, refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
 })();

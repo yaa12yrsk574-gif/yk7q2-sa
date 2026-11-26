@@ -194,7 +194,7 @@ window.BoneTemplates = (() => {
 
   // ---- プルプル：脚のない丸いプニプニ。体の横に「突起」の芽（はじめは体の中にしまってある）。カニを見てマネした時に、にゅっと生える（puluSprout）----
   const PULU_STUB = { pts: [[-.09, .09, .06], [-.15, .07, .13], [-.17, .03, .18], [-.17, .004, .2]], w: [[0, .022], [.5, .019], [1, .014]] }; /* 生えた時：細めの、先が丸い突起（爪にするのはプレイヤー） */
-  function puluData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 10 });
+  function puluData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: id === 1 ? 18 : 10 }); /* 体はなめらかに（透けると角が目立つ） */
     add(1, null, null, [[0, .135, -.1], [0, .135, 0], [0, .135, .1]], PR([0, .06], [.22, .125], [.5, .14], [.78, .125], [1, .06]), PR([0, .06], [.22, .125], [.5, .14], [.78, .125], [1, .06]));
     add(2, 1, 2, [[-.05, .1, .07], [-.06, .095, .08]], PR([0, .008], [1, .006]), PR([0, .008], [1, .006]));
     twinOf(B, 2, 3); return finish(B, 'pulu', { id: 1, i: 1 }); }

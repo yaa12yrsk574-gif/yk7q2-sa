@@ -145,9 +145,9 @@ window.PlayStory = (() => {
         case 'lie': { glow(Math.max(0.15, 0.3 - S.t * 0.05)); // じっとしてる。ペンギンが近づくと、ぷるっと震えて固まる
           if (dPen < 3.2) { S.st = 'freeze'; S.t = 0; say(); } else if (S.t > 14) { S.t = 6; say(); } /* なかなか来えへん：自分でぷるっ（生きてるのが分かる） */ return idle; }
         case 'freeze': { glow(0.15); face(B, pen.x, pen.z, dt, 0.5); // 様子見（ゆっくりこっちを向くだけ）
-          if (dPen < 1.7) { const ax = h.x - pen.x, l = Math.abs(ax) || 1; S.mt = [h.x + ax / l * 0.6, BE.SHORE + 0.7]; S.st = 'flee'; S.t = 0; } return idle; }
+          if (dPen < 1.7) { const ax = h.x - pen.x, l = Math.abs(ax) || 1; S.mt = [h.x + ax / l * 0.6, BE.SHORE - 0.35]; S.st = 'flee'; S.t = 0; } /* 波打ち際まで（足元が濡れるくらい） */ return idle; }
         case 'flee': { const r = go(B, S.mt[0], S.mt[1], 1, 0.1); // 海の方へ逃げる
-          if ((r.d > 0.1 || h.z < BE.waterZ() - 0.4) && S.t < 1.5) return r; BE.surge(1.4); S.st = 'scared'; S.t = 0; say('big'); return idle; }
+          if (r.d > 0.1 && S.t < 1.5) return r; BE.surge(1.4); S.st = 'scared'; S.t = 0; say('big'); return idle; }
         case 'scared': { // ザバッ！ 波にビビって、あわてて砂の方へ戻る（逃げ場がない）
           if (S.t < 0.4) { face(B, h.x, h.z + 5, dt, 6); return idle; }
           if (!S.mt2) { const sx = Math.sign(h.x - pen.x) || 1; S.mt2 = [h.x + sx * 1.4, BE.SHORE - 2.0]; }

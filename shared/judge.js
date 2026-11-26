@@ -18,9 +18,9 @@ window.BoneJudge = (() => {
   // ---- 固いもの：中の「関節の元」が、判定を満たした所だけ表に出てくる ----
   //   爪     ＝ 突起の先だけ、白っぽい不透明な固い爪になる（透明な体の先に、固い爪がちょこんと付く）
   //   支える脚 ＝ 脚の中に太い芯が通って、透けて見える（外は柔らかいまま）
-  function hardParts(B, inner) { const J = { legsOf, claw, carryJudge, CLAW_NEED, rr };
+  function hardParts(B, inner, M) { const J = { legsOf, claw, carryJudge, CLAW_NEED, rr };
     const legs = J.legsOf(B.D.bones, B.rest), carry = J.carryJudge(B.D.bones, B.rest, 0.7).ok, items = [], up = new THREE.Vector3(0, 1, 0);
-    const clawM = new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.3, metalness: 0.05, emissive: 0x5a4a30, emissiveIntensity: 0.35 }), boneM = new THREE.MeshStandardMaterial({ color: 0xf0e6cc, roughness: 0.5, transparent: true, opacity: 0.8 });
+    const clawM = (M && M.claw) || new THREE.MeshStandardMaterial({ color: 0xd9dee6, roughness: 0.22, metalness: 0.85 }), boneM = (M && M.bone) || new THREE.MeshStandardMaterial({ color: 0xc9ced6, roughness: 0.3, metalness: 0.8 }); /* 関節の元＝金属 */
     const cone = new THREE.ConeGeometry(1, 1, 8, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 7, 1);
     for (const b of legs) { const n = b.pts.length; if (J.claw(b).grip >= J.CLAW_NEED) { const m = new THREE.Mesh(cone, clawM); m.renderOrder = 3; inner.add(m); items.push({ b, kind: 'claw', m, r: J.rr(b, 0.6) * 1.08 }); /* 表面から少しだけ出る */ }
       if (carry) for (let i = 0; i < n - 1; i++) { const m = new THREE.Mesh(cyl, boneM); m.renderOrder = 1; inner.add(m); items.push({ b, kind: 'bone', i, m, r: J.rr(b, (i + 0.5) / (n - 1)) * 0.42 }); } }
