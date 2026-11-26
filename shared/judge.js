@@ -15,5 +15,18 @@ window.BoneJudge = (() => {
   let base = null; const baseline = () => base || (base = (() => { try { return carryRaw(window.BoneTemplates.data('tokage').bones).sum || 0.01; } catch (_) { return 0.01; } })());
   // sizeM：背の高さ（m）。0.7m を基準に、大きいほど強い
   function carryJudge(bones, rest, sizeM) { const r = carryRaw(bones, rest), ratio = r.sum / (baseline() * CARRY_X) * Math.pow((sizeM || 0.7) / 0.7, 1.5); return { ok: ratio >= 1, p: Math.min(1, ratio), ratio, legs: r.n }; }
-  return { legsOf, claw, clawJudge, carryJudge, CLAW_NEED };
+  // ---- 固いもの：中の「関節の元」が、判定を満たした所だけ表に出てくる ----
+  //   爪     ＝ 突起の先だけ、白っぽい不透明な固い爪になる（透明な体の先に、固い爪がちょこんと付く）
+  //   支える脚 ＝ 脚の中に太い芯が通って、透けて見える（外は柔らかいまま）
+  function hardParts(B, inner) { const J = { legsOf, claw, carryJudge, CLAW_NEED, rr };
+    const legs = J.legsOf(B.D.bones, B.rest), carry = J.carryJudge(B.D.bones, B.rest, 0.7).ok, items = [], up = new THREE.Vector3(0, 1, 0);
+    const clawM = new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.3, metalness: 0.05, emissive: 0x5a4a30, emissiveIntensity: 0.35 }), boneM = new THREE.MeshStandardMaterial({ color: 0xf0e6cc, roughness: 0.5, transparent: true, opacity: 0.8 });
+    const cone = new THREE.ConeGeometry(1, 1, 8, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 7, 1);
+    for (const b of legs) { const n = b.pts.length; if (J.claw(b).grip >= J.CLAW_NEED) { const m = new THREE.Mesh(cone, clawM); m.renderOrder = 3; inner.add(m); items.push({ b, kind: 'claw', m, r: J.rr(b, 0.6) * 1.08 }); /* 表面から少しだけ出る */ }
+      if (carry) for (let i = 0; i < n - 1; i++) { const m = new THREE.Mesh(cyl, boneM); m.renderOrder = 1; inner.add(m); items.push({ b, kind: 'bone', i, m, r: J.rr(b, (i + 0.5) / (n - 1)) * 0.42 }); } }
+    const at = (P, u) => { let L = 0; const seg = []; for (let i = 1; i < P.length; i++) { const d = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]); seg.push(d); L += d; } let want = u * L; for (let i = 1; i < P.length; i++) { if (want <= seg[i - 1] || i === P.length - 1) { const k = Math.min(1, want / (seg[i - 1] || 1)); return P[i - 1].map((v, j) => v + (P[i][j] - v) * k); } want -= seg[i - 1]; } return P[P.length - 1]; };
+    const place = (m, a, b2, r) => { const A = new THREE.Vector3(...a), Bv = new THREE.Vector3(...b2), d = Bv.clone().sub(A), L = d.length() || 1e-4; m.position.copy(A).add(Bv).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(up, d.normalize()); m.scale.set(r, L, r); };
+    function update(P) { for (const it of items) { const pts = P[it.b.id] || it.b.pts; if (!pts || pts.length < 2) continue; if (it.kind === 'claw') place(it.m, at(pts, 0.58), pts[pts.length - 1], it.r); else place(it.m, pts[it.i], pts[it.i + 1], it.r); } }
+    return { update, dispose() { cone.dispose(); cyl.dispose(); clawM.dispose(); boneM.dispose(); } }; }
+  return { legsOf, claw, clawJudge, carryJudge, CLAW_NEED, rr, hardParts };
 })();

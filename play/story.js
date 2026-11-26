@@ -51,7 +51,7 @@ window.PlayStory = (() => {
   // 落ち着き：動くのは用がある時だけ。それ以外はその場でじっと見てる
   function brain(world, opts) {
     const flower = opts.flower;
-    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'drift', t: 0, dr: null, w0: null, mt2: null, pat: 0, hold: 0, steps: 0, eyed: false, sprouted: false, clawT: 0, stage: 1, got: 0, cr: null, ct: 0, carryOK: false, afterGrow: null, crouch: false, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
+    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'drift', t: 0, dr: null, w0: null, mt2: null, pat: 0, hold: 0, steps: 0, eyed: false, sprouted: false, clawT: 0, soft: false, clawPose: 0, stage: 1, got: 0, cr: null, ct: 0, carryOK: false, afterGrow: null, crouch: false, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
     reset();
     // 記号や絵は出さない。気持ちは全部 動きで出す（プレイヤーが読み取る）。say は「ぷるっ」と体で反応するだけ
     let sq = null; const say = (k) => { if (sq) sq(k === 'big' ? 2.4 : 1.4); };
@@ -185,10 +185,12 @@ window.PlayStory = (() => {
         case 'crabSee': { const c = world.crab; face(B, c.x, c.z, dt, 3); S.tiltT = 0.3 + Math.min(0.25, c.y * 0.2); /* 見上げて、登っていくのを目で追う */
           if (S.t > 3.2 || c.st === 'top') { S.st = 'climbTry'; S.t = 0; say('big'); } return idle; }
         case 'climbTry': { // 壁の前まで行って、飛びつく
-          if (!S.cl) { const wx = rock.x - 0.35, wz = rock.z1 + B.radius + 0.06, r = go(B, wx, wz, 0.8, 0.06); if (r.d > 0.06 && S.t < 5) return r; h.yaw = Math.PI; S.cl = window.PlayClimb.start(B, rock.top); S.fall = 0; }
+          if (!S.cl) { const wx = rock.x - 0.35, wz = rock.z1 + B.radius + 0.06, r = go(B, wx, wz, 0.8, 0.06); if (r.d > 0.06 && S.t < 5) return r;
+            if (S.soft && !S.clawPose) { S.clawPose = 1; G(B, 'g_claw'); } if (S.clawPose === 1) { if (h.gest && S.t < 9) { face(B, rock.x, rock.z, dt, 3); return idle; } S.clawPose = 2; } /* 壁の前で、マネした爪を作ってみせる */
+            h.yaw = Math.PI; S.cl = window.PlayClimb.start(B, rock.top); S.fall = 0; }
           const c = window.PlayClimb.step(S.cl, dt); h.y = c.y; h.yaw = Math.PI; h.st = 'ground'; h.v = 0; if (B.M.walk) { h.gm = B.M.walk; h.ph = (h.ph + dt * 24 * (c.ratio >= 1 ? 1 : 0.6 + c.ratio)) % B.M.walk.len; } S.tiltT = 1.45; /* 腹を壁に向けて、歩きの動きで掻く */
           if (c.st === 'top') { h.z = rock.z1 - B.radius - 0.25; h.y = rock.top; h.gm = null; S.cl = null; S.crabDone = true; S.st = 'crabTop'; S.t = 0; say('big'); return null; }
-          if (c.st === 'fail') { S.cl = null; S.tries++; S.st = 'climbFall'; S.t = 0; S.fv = 0; } return null; }
+          if (c.st === 'fail') { S.cl = null; S.tries++; S.st = 'climbFall'; S.t = 0; S.fv = 0; if (S.soft) { ctx.squash && ctx.squash(3.2); say('big'); S.soft = false; S.clawPose = 0; } } return null; } /* 力を入れた瞬間、先がぐにゃっと丸に戻る */
         case 'climbFall': { // ずり落ちて、べちゃ
           if (h.y > 0) { S.fv -= 16 * dt; h.y = Math.max(0, h.y + S.fv * dt); S.tiltT = 1.2; if (h.y === 0) say('big'); return null; }
           h.z = rock.z1 + B.radius + 0.12; if (S.t < 1.3) { face(B, rock.x, rock.z, dt, 2); S.tiltT = 0.35; return idle; } /* 見上げる */
@@ -198,7 +200,7 @@ window.PlayStory = (() => {
           face(B, c.x, c.z, dt, 3); S.tiltT = 0.25 + Math.min(0.3, c.y * 0.25); if (!S.lap0) S.lap0 = c.laps + 1;
           if (S.t > 2.5 && !S.sprouted) { S.sprouted = true; ctx.sprout && ctx.sprout(); say('big'); S.clawT = 0.8; } /* にゅっ：マネしたくて、体の横から突起が生える */
           if (S.sprouted && !h.gest) { S.clawT -= dt; if (S.clawT <= 0) { G(B, 'g_claw'); S.clawT = 1.2 + Math.random(); } } /* カニの爪に合わせて、先をくいっと曲げてマネする */
-          if ((c.laps >= S.lap0 && S.t > 9) || S.t > 18) { S.observed = true; S.lap0 = 0; S.st = 'wantTool'; S.t = 0; S.back = false; G(B, 'g_hop'); } return idle; }
+          if ((c.laps >= S.lap0 && S.t > 9) || S.t > 18) { S.observed = true; S.lap0 = 0; S.st = 'climbTry'; S.tries = 2; S.t = 0; S.soft = true; G(B, 'g_hop'); } return idle; } /* よし、マネできた！ → すぐ自分で試しに行く（形は一瞬なら作れるけど、保てない） */
         case 'wantTool': { // 工房に行きたい：ペンギンのそばで、ぴょんぴょん。工房から戻ったら、もう一回
           if (S.back) { S.back = false; S.tries = 0; S.st = S.stage === 2 ? 'invite' : 'climbTry'; S.t = 0; S.crouch = false; return idle; }
           if (dPen > 2) return go(B, pen.x, pen.z, 0.8, 1.2);

@@ -21,8 +21,8 @@ function leaveAsk(go) { let d = document.getElementById('leaveDlg'); if (!d) { d
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { if (b.dataset.t !== 'tool' && fT.classList.contains('on')) { let un = false; try { un = !!(fT.contentWindow.__unsaved && fT.contentWindow.__unsaved()); } catch (_) {} if (un) { leaveAsk(() => switchTab(b)); return; } } switchTab(b); });
 function switchTab(b) { const fromTool = fT.classList.contains('on'); stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); fP.classList.toggle('on', t === 'play'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
-  if (t === 'play') { if (!playLoaded) { playLoaded = true; fP.src = 'play.html?v=e18cf17ea651'; } else { try { fP.contentWindow.__play.refresh(); } catch (_) {} } setTimeout(() => { try { fP.contentWindow.focus(); } catch (_) {} }, 50); }
-  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=49b9d7d725ce'; }
+  if (t === 'play') { if (!playLoaded) { playLoaded = true; fP.src = 'play.html?v=c7ef5e2ebc9d'; } else { try { fP.contentWindow.__play.refresh(); } catch (_) {} } setTimeout(() => { try { fP.contentWindow.focus(); } catch (_) {} }, 50); }
+  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=19c997cfab20'; }
   if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); if (fromTool) fG.contentWindow.__field.back(); fG.contentWindow.focus(); } catch (_) {} } else if (t === 'tool') { try { fT.contentWindow.focus(); } catch (_) {} } }
 
 // <bone_sync>
@@ -35,4 +35,4 @@ window.__boneOuter = true;
 boneCloud({ use: n => { try { return window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null); } catch (_) { return Promise.resolve(null); } },
   status: (t, warn) => { const e = document.getElementById('cloudSt'); e.textContent = t.replace('（手元には残ってる）', '').replace('この端末に保存', ''); e.style.color = warn ? '#ffb199' : ''; },
   onWorks: () => { try { fG.contentWindow.__field.refresh(); } catch (_) {} },
-  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=49b9d7d725ce'; } });
+  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=19c997cfab20'; } });

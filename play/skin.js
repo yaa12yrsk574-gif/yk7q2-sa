@@ -17,14 +17,15 @@ window.PlaySkins = (() => {
         if (m && m.geometry.attributes.position.count === G.I.length) writeFlat(m.geometry, G); else { if (m) { inner.remove(m); m.geometry.dispose(); } m = new THREE.Mesh(painted(G, b, base), mat); m.castShadow = true; meshes.set(b.id, m); inner.add(m); } } }
     return { g, inner, setPose, update() {}, dispose() { for (const m of meshes.values()) m.geometry.dispose(); mat.dispose(); } }; }
   // プニプニ：半透明でつるっと。着地でつぶれて、プルンと戻る（ばね）。跳ぶと縦に伸びる
+
   function puni(B) { const g = new THREE.Group(), wob = new THREE.Group(), inner = new THREE.Group(); g.add(wob); wob.add(inner);
-    const mc = mainColor(B), col = mc ? new THREE.Color(mc).lerp(new THREE.Color(0x9fe8ff), 0.25) : new THREE.Color(0x7fdcc4), /* 塗ってない子はミント色 */ skin = new THREE.MeshStandardMaterial({ color: col, roughness: 0.18, metalness: 0, transparent: true, opacity: 0.62, emissive: col.clone().multiplyScalar(0.18), depthWrite: false, side: THREE.FrontSide }),
+    const hard = window.BoneJudge && window.BoneJudge.hardParts ? window.BoneJudge.hardParts(B, inner) : { update() {}, dispose() {} }, mc = mainColor(B), col = mc ? new THREE.Color(mc).lerp(new THREE.Color(0x9fe8ff), 0.25) : new THREE.Color(0x7fdcc4), /* 塗ってない子はミント色 */ skin = new THREE.MeshStandardMaterial({ color: col, roughness: 0.18, metalness: 0, transparent: true, opacity: 0.62, emissive: col.clone().multiplyScalar(0.18), depthWrite: false, side: THREE.FrontSide }),
       core = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.7), roughness: 0.5, transparent: true, opacity: 0.35, depthWrite: false }), meshes = new Map();
     let lastKey = null, k = 0, kv = 0;
     function smooth(G) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(G.V.slice(), 3)); geo.setIndex(G.I.slice()); geo.computeVertexNormals(); return geo; }
     function setPose(v) { if (v.key === lastKey) return; lastKey = v.key; for (const b of B.D.bones) { const G = geomOf(B, b, v.P); if (!G) continue; let m = meshes.get(b.id);
         if (m && m.geometry.attributes.position.count === G.V.length / 3) { m.geometry.attributes.position.array.set(G.V); m.geometry.attributes.position.needsUpdate = true; m.geometry.computeVertexNormals(); }
-        else { if (m) { inner.remove(m); inner.remove(m.userData.c); m.geometry.dispose(); } m = new THREE.Mesh(smooth(G), skin); const c = new THREE.Mesh(m.geometry, core); c.scale.setScalar(0.72); m.userData.c = c; m.renderOrder = 2; meshes.set(b.id, m); inner.add(c); inner.add(m); } } }
+        else { if (m) { inner.remove(m); inner.remove(m.userData.c); m.geometry.dispose(); } m = new THREE.Mesh(smooth(G), skin); const c = new THREE.Mesh(m.geometry, core); c.scale.setScalar(0.72); m.userData.c = c; m.renderOrder = 2; meshes.set(b.id, m); inner.add(c); inner.add(m); } } hard.update(v.P); }
     // ぷにぷに：骨の動きにぴったり貼り付けず、体が遅れてついてくる。着地でつぶれて、止まったらぷるんと揺れ残る
     //   k＝縦の伸び縮み（ばね）、lx/lz＝前後・左右の傾き（ばね。動き出し・止まり・曲がりで遅れて揺れる）
     let lx = 0, lxv = 0, lz = 0, lzv = 0, pv = null, pyaw = null, t = 0, sv = null, trem = 0;
@@ -36,7 +37,7 @@ window.PlaySkins = (() => {
       const tx = Math.max(-0.35, Math.min(0.35, -acc * 0.025 + sp * 0.04)), tz = Math.max(-0.3, Math.min(0.3, -yr * sp * 0.05)); /* 加速で後ろへ、止まると前へつんのめる。曲がると外へ */
       lxv += (-(lx - tx) * 90 - lxv * 6) * dt; lx += lxv * dt; lzv += (-(lz - tz) * 90 - lzv * 6) * dt; lz += lzv * dt;
       const br = 0.012 * Math.sin(t * 2.4); wob.scale.set(1 - k * 0.5 - br, 1 + k + br, 1 - k * 0.5 - br); wob.rotation.x = lx * 0.6 + Math.sin(t * 41 + 1) * 0.04 * trem; wob.rotation.z = lz * 0.6 + Math.sin(t * 47) * 0.06 * trem; }
-    return { g, inner, setPose, update, squash(a) { kv -= a; }, glow(a) { core.emissive = core.emissive || new THREE.Color(0); core.opacity = 0.35 + Math.max(0, a) * 0.4; }, strain(v, tr) { sv = v; trem = v == null ? 0 : tr; if (v == null) kv -= 4; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); skin.dispose(); core.dispose(); } }; }
+    return { g, inner, setPose, update, squash(a) { kv -= a; }, glow(a) { core.emissive = core.emissive || new THREE.Color(0); core.opacity = 0.35 + Math.max(0, a) * 0.4; }, strain(v, tr) { sv = v; trem = v == null ? 0 : tr; if (v == null) kv -= 4; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); skin.dispose(); core.dispose(); hard.dispose(); } }; }
   // プルプル：「関節の元」（中に浮かぶ芯の玉）＋「透明なプルプル成分」。玉の数＝関節の数（体の大きさとは別）
   function pulu(B) { const g = new THREE.Group(), wob = new THREE.Group(), inner = new THREE.Group(); g.add(wob); wob.add(inner);
     const mc = mainColor(B), col = mc ? new THREE.Color(mc).lerp(new THREE.Color(0xbff3ff), 0.35) : new THREE.Color(0x9fe6e0),
