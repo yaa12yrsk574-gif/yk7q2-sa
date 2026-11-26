@@ -51,7 +51,7 @@ window.PlayStory = (() => {
   // 落ち着き：動くのは用がある時だけ。それ以外はその場でじっと見てる
   function brain(world, opts) {
     const flower = opts.flower;
-    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'drift', t: 0, dr: null, w0: null, mt2: null, pat: 0, hold: 0, steps: 0, eyed: false, stage: 1, got: 0, cr: null, ct: 0, carryOK: false, afterGrow: null, crouch: false, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
+    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'drift', t: 0, dr: null, w0: null, mt2: null, pat: 0, hold: 0, steps: 0, eyed: false, sprouted: false, clawT: 0, stage: 1, got: 0, cr: null, ct: 0, carryOK: false, afterGrow: null, crouch: false, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
     reset();
     // 記号や絵は出さない。気持ちは全部 動きで出す（プレイヤーが読み取る）。say は「ぷるっ」と体で反応するだけ
     let sq = null; const say = (k) => { if (sq) sq(k === 'big' ? 2.4 : 1.4); };
@@ -196,7 +196,9 @@ window.PlayStory = (() => {
         case 'observe': { // 自分からカニを見に行って、じーっと見る（ゆっくり・骨が透ける・爪先が光る）
           const c = world.crab, ox = c.x + 0.9, oz = rock.z1 + 1.1, r = go(B, ox, oz, 0.6, 0.08); if (r.d > 0.08 && S.t < 4) return r;
           face(B, c.x, c.z, dt, 3); S.tiltT = 0.25 + Math.min(0.3, c.y * 0.25); if (!S.lap0) S.lap0 = c.laps + 1;
-          if ((c.laps >= S.lap0 && S.t > 6) || S.t > 16) { S.observed = true; S.lap0 = 0; S.st = 'wantTool'; S.t = 0; S.back = false; G(B, 'g_hop'); } return idle; }
+          if (S.t > 2.5 && !S.sprouted) { S.sprouted = true; ctx.sprout && ctx.sprout(); say('big'); S.clawT = 0.8; } /* にゅっ：マネしたくて、体の横から突起が生える */
+          if (S.sprouted && !h.gest) { S.clawT -= dt; if (S.clawT <= 0) { G(B, 'g_claw'); S.clawT = 1.2 + Math.random(); } } /* カニの爪に合わせて、先をくいっと曲げてマネする */
+          if ((c.laps >= S.lap0 && S.t > 9) || S.t > 18) { S.observed = true; S.lap0 = 0; S.st = 'wantTool'; S.t = 0; S.back = false; G(B, 'g_hop'); } return idle; }
         case 'wantTool': { // 工房に行きたい：ペンギンのそばで、ぴょんぴょん。工房から戻ったら、もう一回
           if (S.back) { S.back = false; S.tries = 0; S.st = S.stage === 2 ? 'invite' : 'climbTry'; S.t = 0; S.crouch = false; return idle; }
           if (dPen > 2) return go(B, pen.x, pen.z, 0.8, 1.2);

@@ -1535,6 +1535,31 @@ function paintAt(x,y){
   pushUndo();if(!b.paint)b.paint={};b.paint[h.faceIndex]=color;needRebuild=true;save();
 }
 const __bone = id => boneById(id);
+
+// ============ 草原から「この子をいじる」で開く：その作品を読み込んで、シルエットで始める ============
+window.__editWork = id => { const w = loadWorks().find(x => x.id === id); if (!w) return false; if (curWork !== id) { pushUndo(); S = clone(w.data); setCur(id); afterLoad(); markSaved(); }
+  try { closeWorks(); } catch (_) {} document.querySelector('#modes [data-m="sil"]').click(); const leg = S.bones.find(b => b.parent != null && b.pts.length > 2); if (leg) { sel = leg.id; rebuild(); updBtns(); }
+  { const P = S.bones.flatMap(b => b.pts), mn = [0, 1, 2].map(i => Math.min(...P.map(p => p[i]))), mx = [0, 1, 2].map(i => Math.max(...P.map(p => p[i]))); orbit.tx = (mn[0] + mx[0]) / 2; orbit.ty = (mn[1] + mx[1]) / 2; orbit.tz = (mn[2] + mx[2]) / 2; orbit.dist = Math.max(1.0, Math.min(3, Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) * 3)); }
+  JUDGE.reset(); return true; };
+// ============ 判定：いじってる最中に、体の形が「何ができる体か」を満たしたらパッと点く。まだ見つけてへん判定は「？？？」 ============
+const JUDGE = (() => { const LIST = [['claw', '爪', '先が細くて、反ってる'], ['carry', '支える脚', '脚が太くて、どっしり'], ['wing', '羽', '']], FKEY = 'yuya_judge_found';
+  let found = {}; try { found = JSON.parse(localStorage.getItem(FKEY) || '{}') || {}; } catch (_) {}
+  const box = document.createElement('div'); box.id = 'judgeBox'; box.style.cssText = 'position:fixed;left:12px;z-index:40;display:none;gap:10px;padding:6px 12px 5px;border-radius:14px;background:#fffdf8e6;box-shadow:0 2px 10px #0002;font:800 11px sans-serif;color:#5b554c;pointer-events:none';
+  const els = {}; for (const [k] of LIST) { const d = document.createElement('div'); d.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;transition:transform .25s';
+    d.innerHTML = '<div class="jr" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff"></div><div class="jl"></div>'; box.appendChild(d); els[k] = d; }
+  document.body.appendChild(box); const st = document.createElement('style'); st.textContent = '@keyframes jpop{0%{transform:scale(1)}35%{transform:scale(1.45)}70%{transform:scale(.92)}100%{transform:scale(1)}}'; document.head.appendChild(st);
+  let last = {}, prev = {};
+  function calc() { const bones = S.bones || [], J = window.BoneJudge; if (!J) return {}; return { claw: J.clawJudge(bones), carry: J.carryJudge(bones, null, 0.7), wing: { ok: false, p: 0 } }; }
+  function tick() { const on = !!(S && S.tpl && S.tpl.kind === 'pulu') && mode !== 'pose'; box.style.display = on ? 'flex' : 'none'; if (!on) return;
+    const top = document.getElementById('top2') || document.getElementById('top'); box.style.top = ((top && top.getBoundingClientRect().bottom) || 60) + 8 + 'px'; /* 左上：トーストと重ならへん所 */
+    const R = calc(); for (const [k, name, why] of LIST) { const r = R[k] || { ok: false, p: 0 }, d = els[k], ring = d.querySelector('.jr'), lb = d.querySelector('.jl'), known = !!found[k], p = Math.max(0, Math.min(1, r.p || 0));
+      if (r.ok && !prev[k]) { if (!known) { found[k] = 1; try { localStorage.setItem(FKEY, JSON.stringify(found)); } catch (_) {} } d.style.animation = 'none'; void d.offsetWidth; d.style.animation = 'jpop .55s'; toast(name + 'ができた！ ' + why); }
+      prev[k] = r.ok; const showP = known || p > 0.15, deg = Math.round((r.ok ? 1 : p) * 360), col = r.ok ? '#f0a020' : '#7fc7d9';
+      ring.style.background = showP ? 'conic-gradient(' + col + ' ' + deg + 'deg,#e6e0d4 0)' : '#e6e0d4'; ring.style.boxShadow = r.ok ? '0 0 10px #f0a020' : 'none'; ring.textContent = r.ok ? '✓' : '';
+      lb.textContent = known || r.ok ? name : '？？？'; lb.style.color = r.ok ? '#c47a00' : '#8a8378'; } }
+  setInterval(() => { try { tick(); } catch (_) {} }, 250);
+  return { reset() { prev = {}; for (const k in last) delete last[k]; try { const R = calc(); for (const k in R) prev[k] = R[k].ok; } catch (_) {} } }; })();
+try { const pe = parent && parent.__pendingEdit; if (pe) { parent.__pendingEdit = null; setTimeout(() => window.__editWork(pe), 0); } } catch (_) {}
 window.__bt = { get S() { return S; }, orbit, proj, rebuild, setMode(m) { document.querySelector(`#modes [data-m="${m}"]`).click(); }, get sel() { return sel; }, set sel(v) { sel = v; }, get VSEL() { return VSEL; }, gizmoGeo, allVerts, vPos, saveCurrent, loadWorks, ANIM, poseAt, gotoFrame, commitPose, actionLine, rotRings, get selJ() { return selJ; }, finishSil, geomCache: () => geomCache, boneHit, jointHit, flowSel, setSel, lassoSelect, get SELB() { return SELB; }, autoLink, linkTo: (id, b, i) => linkTo(id, { b: __bone(b), i }), mainRoot, tracks, segOf, segInfo, trajTap, selBez, trajDown, AX, get axisMode() { return axisMode; } };
 // <tpl_lib>
 // ---- 設計図のテンプレ（動きのお手本）と、今の骨への当てはめ ----

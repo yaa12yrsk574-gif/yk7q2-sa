@@ -25,11 +25,18 @@ window.PlaySkins = (() => {
     function setPose(v) { if (v.key === lastKey) return; lastKey = v.key; for (const b of B.D.bones) { const G = geomOf(B, b, v.P); if (!G) continue; let m = meshes.get(b.id);
         if (m && m.geometry.attributes.position.count === G.V.length / 3) { m.geometry.attributes.position.array.set(G.V); m.geometry.attributes.position.needsUpdate = true; m.geometry.computeVertexNormals(); }
         else { if (m) { inner.remove(m); inner.remove(m.userData.c); m.geometry.dispose(); } m = new THREE.Mesh(smooth(G), skin); const c = new THREE.Mesh(m.geometry, core); c.scale.setScalar(0.72); m.userData.c = c; m.renderOrder = 2; meshes.set(b.id, m); inner.add(c); inner.add(m); } } }
-    // 着地の強さでつぶれる。空中は速さで縦に伸びる
-    function update(dt, v, ev) { if (ev && ev.land != null) kv -= Math.min(3.5, 0.8 + ev.land * 1.6); if (ev === 'lift') kv += 2.2;
-      const target = v.st === 'jair' || v.st === 'air' ? Math.max(-0.12, Math.min(0.18, v.vy * 0.025)) : v.st === 'charge' ? -0.12 : 0; kv += (-(k - target) * 140 - kv * 9) * dt; k += kv * dt; k = Math.max(-0.4, Math.min(0.35, k));
-      wob.scale.set(1 - k * 0.5, 1 + k, 1 - k * 0.5); }
-    return { g, inner, setPose, update, dispose() { for (const m of meshes.values()) m.geometry.dispose(); skin.dispose(); core.dispose(); } }; }
+    // ぷにぷに：骨の動きにぴったり貼り付けず、体が遅れてついてくる。着地でつぶれて、止まったらぷるんと揺れ残る
+    //   k＝縦の伸び縮み（ばね）、lx/lz＝前後・左右の傾き（ばね。動き出し・止まり・曲がりで遅れて揺れる）
+    let lx = 0, lxv = 0, lz = 0, lzv = 0, pv = null, pyaw = null, t = 0, sv = null, trem = 0;
+    function update(dt, v, ev) { t += dt; dt = Math.min(dt, 0.05); if (ev && ev.land != null) kv -= Math.min(3.5, 0.8 + ev.land * 1.6); if (ev === 'lift') kv += 2.2;
+      const sp = v.st === 'ground' ? Math.hypot(v.x - (pv ? pv[0] : v.x), v.z - (pv ? pv[1] : v.z)) / Math.max(1e-3, dt) : 0, acc = pv ? (sp - pv[2]) / Math.max(1e-3, dt) : 0; pv = [v.x, v.z, sp];
+      const yr = pyaw == null ? 0 : Math.atan2(Math.sin(v.yaw - pyaw), Math.cos(v.yaw - pyaw)) / Math.max(1e-3, dt); pyaw = v.yaw;
+      if (Math.abs(acc) > 3) kv -= Math.sign(acc) * Math.min(1.2, Math.abs(acc) * 0.05); /* 急に動く・止まる：むにっ */
+      const target = sv != null ? sv : v.st === 'jair' || v.st === 'air' ? Math.max(-0.12, Math.min(0.18, v.vy * 0.025)) : v.st === 'charge' ? -0.12 : 0; kv += (-(k - target) * 140 - kv * 7) * dt; k += kv * dt; k = Math.max(-0.45, Math.min(0.45, k));
+      const tx = Math.max(-0.35, Math.min(0.35, -acc * 0.025 + sp * 0.04)), tz = Math.max(-0.3, Math.min(0.3, -yr * sp * 0.05)); /* 加速で後ろへ、止まると前へつんのめる。曲がると外へ */
+      lxv += (-(lx - tx) * 90 - lxv * 6) * dt; lx += lxv * dt; lzv += (-(lz - tz) * 90 - lzv * 6) * dt; lz += lzv * dt;
+      const br = 0.012 * Math.sin(t * 2.4); wob.scale.set(1 - k * 0.5 - br, 1 + k + br, 1 - k * 0.5 - br); wob.rotation.x = lx * 0.6 + Math.sin(t * 41 + 1) * 0.04 * trem; wob.rotation.z = lz * 0.6 + Math.sin(t * 47) * 0.06 * trem; }
+    return { g, inner, setPose, update, squash(a) { kv -= a; }, glow(a) { core.emissive = core.emissive || new THREE.Color(0); core.opacity = 0.35 + Math.max(0, a) * 0.4; }, strain(v, tr) { sv = v; trem = v == null ? 0 : tr; if (v == null) kv -= 4; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); skin.dispose(); core.dispose(); } }; }
   // プルプル：「関節の元」（中に浮かぶ芯の玉）＋「透明なプルプル成分」。玉の数＝関節の数（体の大きさとは別）
   function pulu(B) { const g = new THREE.Group(), wob = new THREE.Group(), inner = new THREE.Group(); g.add(wob); wob.add(inner);
     const mc = mainColor(B), col = mc ? new THREE.Color(mc).lerp(new THREE.Color(0xbff3ff), 0.35) : new THREE.Color(0x9fe6e0),
@@ -56,5 +63,5 @@ window.PlaySkins = (() => {
       const br = 0.015 * Math.sin(t * 2.4); wob.scale.set(1 - k * 0.5 - br, 1 + k + br, 1 - k * 0.5 - br); /* 息をするみたいに少しふくらむ */
       nucs.forEach((m, n) => { const s = joints[n].r * (1 + 0.08 * Math.sin(t * 3 + n * 1.7)); m.scale.setScalar(s); }); }
     return { g, inner, setPose, update, squash(a) { kv -= a; }, glow(a) { nucMat.emissiveIntensity = 1 + Math.max(0, a) * 3; }, strain(v, tr) { sv = v; trem = v == null ? 0 : tr; if (v == null) kv -= 4; }, dispose() { for (const m of meshes.values()) m.geometry.dispose(); jelly.dispose(); nucMat.dispose(); nucGeo.dispose(); } }; }
-  return { list: [['pulu', 'プルプル'], ['normal', 'ふつう'], ['puni', 'プニプニ']], normal, puni, pulu };
+  return { list: [['puni', 'プニプニ'], ['pulu', 'プルプル'], ['normal', 'ふつう']], normal, puni, pulu };
 })();

@@ -7,8 +7,9 @@
   const msg = (() => { let t = 0; return s => { const e = document.getElementById('msg'); e.textContent = s; e.style.opacity = 1; clearTimeout(t); t = setTimeout(() => e.style.opacity = 0, 2400); }; })();
   const LS = { get: k => { try { return localStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} } };
   // 相棒：工房で保存した作品（なければツノトカゲのお手本）
-  function works() { const l = (window.BoneStorage.loadWorks() || []).filter(w => w && w.data && w.data.bones && w.data.bones.length); if (!l.length) l.push({ id: 'tpl', name: 'ツノトカゲ（お手本）', data: window.BoneTemplates.data('tokage') }); return l; }
-  let held = null, B = null, skin = null, skinKind = LS.get('yuya_play_skin2') || 'pulu', camYaw = 0, camPitch = 0.42, camDist = 0, camDz = 5.6, camT = new THREE.Vector3();
+  const TPLW = () => ({ id: 'tpl', name: 'プルプル（はじめ）', data: window.BoneTemplates.data('pulu') }); /* 物語のはじまりは、脚のない丸いプルプル */
+  function works() { const l = (window.BoneStorage.loadWorks() || []).filter(w => w && w.data && w.data.bones && w.data.bones.length); l.unshift(TPLW()); return l; }
+  let held = null, B = null, skin = null, skinKind = LS.get('yuya_play_skin3') || 'puni', camYaw = 0, camPitch = 0.42, camDist = 0, camDz = 5.6, camT = new THREE.Vector3();
   // ---- 序盤：ペンギン（プレイヤー）とプルプル。phase＝small（0.4m・自分で動く）→ big（0.7m・乗れる）。乗ってる間だけプルプルを操作 ----
   const ST = window.PlayStory, pen = ST.penguin(scene, world), rock0 = world.boxes.find(b => b.label === '0.6m'), flower = ST.flower(scene, rock0.x + 0.9, rock0.top, rock0.z - 0.4), brain = ST.brain(world, { flower }), bub = ST.bubble();
   let mimB = 0, phase = 'small', riding = false, growT = -1, growFrom = 1, gx = 1, gxT = 1, carrying = false, strainK = 0, autoCam = true, inYaw = Math.PI; /* gx＝かけらを集めて途中まで大きくなった分、carrying＝乗せてみてる最中（まだ操作は移らへん） */
@@ -28,15 +29,19 @@
     if (!pc.active || gripOf(pc) < 0.3) { const vt = H.w * H.L, hz = vt * Math.cos(H.th); h.st = 'air'; h.vy = vt * Math.sin(H.th) + 1.2; h.v = Math.abs(hz); h.yaw = hz >= 0 ? yawDir : yawDir + Math.PI; h.peak = h.y; h.y0 = h.y; h.from = null; h.airT = 0; h.grip = 0; hang = null; SW.setEnd(SW.rest()); B.events.push('lift'); msg(''); } }
   const hCache = {};
   // 作品の背の高さ（大きさ1の時、m）→ 狙いの背の高さになる大きさ
-  function heightOf(w) { const k = w.id + ':' + (w.t || 0); if (hCache[k]) return hCache[k]; const B1 = window.PlayBody.make(Object.assign({}, w, { __size: 1 })); let top = 0.05;
+  function heightOf(w) { const k = w.id + ':' + (w.t || 0) + ':' + (w.updated || 0); if (hCache[k]) return hCache[k]; const B1 = window.PlayBody.make(Object.assign({}, w, { __size: 1 })); let top = 0.05;
     window.PlayBody.withState(B1.D, core => { for (const b of B1.D.bones) { const G = core.boneGeom(b); if (G) for (let i = 1; i < G.V.length; i += 3) top = Math.max(top, G.V[i]); } }); return (hCache[k] = top); }
   function useWork(w, keepPos) { const old = B && B.h; try { const H = heightOf(w); B = window.PlayBody.make(Object.assign({}, w, { __size: ST.SIZE[phase] / H })); B.Hm = ST.SIZE[phase]; } catch (e) { console.error(e); msg('この作品は読み込めへんかった'); return; }
     if (keepPos && old) Object.assign(B.h, { x: old.x, z: old.z, y: old.y, yaw: old.yaw }); LS.set('yuya_play_mate', w.id);
     document.getElementById('mateBtn').textContent = '相棒：' + (w.name || '名前なし') + ' ▸'; camDist = camDist || 5.6; useSkin(skinKind); held = null;
     pad.use(w.id, ['jump', 'swing'].filter(m => m === 'jump' ? B.M.jump : B.M.attack), !!B.M.attack); /* 1本指＝跳ぶ・振る、2本指でつまむ＝ハサミ（攻撃の動きがある子だけ） */ hang = null;
     const miss = ['walk', 'run', 'jump'].filter(s => !B.M[s]); if (miss.length) msg('この子はまだ「' + miss.map(s => ({ walk: '歩く', run: '走る', jump: '跳ぶ' })[s]).join('・') + '」がない（工房で作ってな）'); }
-  function useSkin(k) { if (!window.PlaySkins[k]) k = 'pulu'; skinKind = k; LS.set('yuya_play_skin2', k); if (skin) { scene.remove(skin.g); skin.dispose(); } skin = window.PlaySkins[k](B); scene.add(skin.g); document.getElementById('skinBtn').textContent = '見た目：' + window.PlaySkins.list.find(x => x[0] === k)[1]; }
-  function pickFirst() { const l = works(), id = LS.get('yuya_play_mate'); useWork(l.find(w => w.id === id) || l.sort((a, b) => (b.t || 0) - (a.t || 0))[0]); placeStart(); }
+  function useSkin(k) { if (!window.PlaySkins[k]) k = 'puni'; skinKind = k; LS.set('yuya_play_skin3', k); if (skin) { scene.remove(skin.g); skin.dispose(); } skin = window.PlaySkins[k](B); scene.add(skin.g); document.getElementById('skinBtn').textContent = '見た目：' + window.PlaySkins.list.find(x => x[0] === k)[1]; }
+  function pickFirst() { useWork(TPLW()); placeStart(); } /* いつも、まだ何も生えてないプルプルから */
+  // 爪のマネ：カニを見ながら、体の横から突起がにゅっと生える（＝この子の作品になる。工房でいじるのはこれ）
+  function sprout() { const T = window.BoneTemplates, l = window.BoneStorage.loadWorks() || []; let w = l.find(x => x.id === 'pulu_story');
+    if (!w || !T.puluSprouted(w.data)) { const now = Date.now(), d = T.puluSprout(T.data('pulu')); w = Object.assign(w || { id: 'pulu_story', created: now }, { name: 'プルプル', data: d, updated: now }); if (!l.includes(w)) l.unshift(w); window.BoneStorage.saveWorks(l); }
+    LS.set('yuya_play_mate', w.id); useWork(w, true); skin.squash && skin.squash(2.2); }
   function placeStart() { Object.assign(B.h, { x: 3, z: BE.SHORE + 30, y: -0.17, yaw: Math.PI, v: 0, vy: 0, st: 'ground', gest: null }); Object.assign(pen, { x: 0.8, z: BE.SHORE - 2.4, y: 0, yaw: 0, v: 0, vy: 0, seated: false, raise: 0 }); skin && skin.strain && skin.strain(null, 0); camYaw = Math.PI; autoCam = true; camT.set(pen.x, 0.55, pen.z); } /* 始まりは浜：波打ち際で海の方を向いて立ってる */
   // 乗る／降りる（0.7m になってから）。乗ったら操作がプルプルに移る
   const rideBtn = document.getElementById('rideBtn'), growBtn = document.getElementById('growBtn');
@@ -56,10 +61,10 @@
   function growPart(f) { gxT = (ST.SIZE.small + (ST.SIZE.big - ST.SIZE.small) * f) / ST.SIZE.small; skin.squash && skin.squash(1.6); }
   function growDone() { if (phase !== 'small') return; const cur = gx * ST.SIZE.small / ST.SIZE.big; phase = 'big'; useWork(B.work, true); gx = gxT = 1; growT = 0; growFrom = cur; brain.S.st = 'grow'; brain.S.afterGrow = 'invite'; }
   growBtn.onclick = grant;
-  document.getElementById('storyBtn').onclick = () => { if (riding) setRide(false); carrying = false; pen.seated = false; gx = gxT = 1; strainK = 0; BE.resetStory(); phase = 'small'; brain.reset(); useWork(B.work, false); placeStart(); bub.show(null); msg('最初から'); };
+  document.getElementById('storyBtn').onclick = () => { if (riding) setRide(false); carrying = false; pen.seated = false; gx = gxT = 1; strainK = 0; BE.resetStory(); phase = 'small'; brain.reset(); useWork(TPLW(), false); placeStart(); bub.show(null); msg('最初から'); };
   document.getElementById('mateBtn').onclick = () => { const l = works(), i = l.findIndex(w => w.id === (B && B.work.id)); useWork(l[(i + 1) % l.length], true); };
   document.getElementById('skinBtn').onclick = () => { const L = window.PlaySkins.list, i = L.findIndex(x => x[0] === skinKind); useSkin(L[(i + 1) % L.length][0]); };
-  document.getElementById('toolBtn').onclick = () => { try { parent.__openTool && parent.__openTool(); } catch (_) {} };
+  document.getElementById('toolBtn').onclick = () => { try { const id = B && B.work.id !== 'tpl' ? B.work.id : null; parent.__openToolWith ? parent.__openToolWith(id) : parent.__openTool && parent.__openTool(); } catch (_) {} }; /* この子を開いて、シルエットで始める */
   if (parent === window) document.getElementById('toolBtn').style.display = 'none';
   // 段の高さの札
   const tags = world.boxes.filter(b => b.label).map(b => { const e = document.createElement('div'); e.className = 'tag'; e.textContent = b.label; document.body.appendChild(e); return { b, e }; });
@@ -82,7 +87,7 @@
       const sy = Math.sin(inYaw), cy = Math.cos(inYaw), mx = -sy * r.fz + cy * r.fx, mz = -cy * r.fz - sy * r.fx; /* カメラから見た前後左右 → 世界の向き */
       const a = pad.read(), air = B.h.st === 'jair' || B.h.st === 'air' || B.h.st === 'flap';
       const pc = a.pinch || {}; grip = pc.active ? gripOf(pc) : 0;
-      const ctxB = { riding, phase, squash: k => skin.squash && skin.squash(k), glow: a => skin.glow && skin.glow(a), grow: growPart, growDone, carryDone, push: (dx, dz) => pen.nudge(dx, dz, world), lift: (k, tr, raise) => { strainK = k == null ? 0 : k; skin.strain && skin.strain(k, tr); pen.raise = raise || 0; } };
+      const ctxB = { riding, phase, squash: k => skin.squash && skin.squash(k), glow: a => skin.glow && skin.glow(a), sprout, grow: growPart, growDone, carryDone, push: (dx, dz) => pen.nudge(dx, dz, world), lift: (k, tr, raise) => { strainK = k == null ? 0 : k; skin.strain && skin.strain(k, tr); pen.raise = raise || 0; } };
       if (carrying) brain.tick(B, pen, dt, Object.assign(ctxB, { carry: true }));
       else if (riding && hang) hangStep(dt, mx, mz, pc);
       else if (riding) { const act = pc.active ? { move: 'grab', active: true, p: pc.open, pmax: pc.pmax, down: pc.down } : a; /* つまんでる間は、ハサミのコマを指の開きで動かす */
@@ -133,5 +138,5 @@
   pickFirst(); requestAnimationFrame(loop);
   msg(matchMedia('(pointer: coarse)').matches ? '左をなぞってペンギンを歩かせる' : 'WASDでペンギンを歩かせる');
   // 工房から戻った時：作品を読み直す（形や動きが変わってるかも）
-  window.__play = { body: () => B, refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
+  window.__play = { body: () => B, camYaw: y => { camYaw = y; autoCam = false; }, refresh() { brain.S.back = true; /* 工房から戻った */ const l = works(), w = l.find(x => x.id === (B && B.work.id)) || l[0]; useWork(w, true); }, pad, world, head: () => B.headAt(B.view()), story: { pen, brain, setWork: w => useWork(w, true), grant, setRide, canRide, get phase() { return phase; }, get riding() { return riding; } }, debug: () => ({ held: !!held, feel, raw: B && JSON.stringify(B.h), h: B && B.h, last: B && B.last, skin: skinKind, M: B && Object.keys(B.M), size: B && B.size }) };
 })();

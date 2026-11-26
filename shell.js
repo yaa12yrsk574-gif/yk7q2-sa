@@ -2,10 +2,11 @@
 
 
 
-const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'), fP = document.getElementById('fPlay'); let playLoaded = false; fG.src = 'hunting.html?v=e9a8070c97e7'; let toolLoaded = false;
+const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'), fP = document.getElementById('fPlay'); let playLoaded = false; fG.src = 'hunting.html?v=8b7933d1a750'; let toolLoaded = false;
 // 狩り場はiframe。子だけのblurでは、画面分割やウィンドウ切替で取り逃す場合がある
 window.__gameOn = true;
 window.__openTool = () => document.querySelector('#tabs button[data-t="tool"]').click();
+window.__openToolWith = id => { window.__pendingEdit = id || null; window.__openTool(); try { if (id && fT.contentWindow && fT.contentWindow.__editWork) { fT.contentWindow.__editWork(id); window.__pendingEdit = null; } } catch (_) {} }; /* 草原の「工房」：その子を開く */
 window.__openPlay = () => document.querySelector('#tabs button[data-t="play"]').click(); /* 草原：作った子で歩き回る */
 function stopGameMovement() { try { fG.contentWindow.__clearMovementInput?.(); } catch (_) {} }
 addEventListener('blur', stopGameMovement);
@@ -20,8 +21,8 @@ function leaveAsk(go) { let d = document.getElementById('leaveDlg'); if (!d) { d
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { if (b.dataset.t !== 'tool' && fT.classList.contains('on')) { let un = false; try { un = !!(fT.contentWindow.__unsaved && fT.contentWindow.__unsaved()); } catch (_) {} if (un) { leaveAsk(() => switchTab(b)); return; } } switchTab(b); });
 function switchTab(b) { const fromTool = fT.classList.contains('on'); stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); fP.classList.toggle('on', t === 'play'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
-  if (t === 'play') { if (!playLoaded) { playLoaded = true; fP.src = 'play.html?v=9b65c76bd955'; } else { try { fP.contentWindow.__play.refresh(); } catch (_) {} } setTimeout(() => { try { fP.contentWindow.focus(); } catch (_) {} }, 50); }
-  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=a3ac0a079a94'; }
+  if (t === 'play') { if (!playLoaded) { playLoaded = true; fP.src = 'play.html?v=83a02488811e'; } else { try { fP.contentWindow.__play.refresh(); } catch (_) {} } setTimeout(() => { try { fP.contentWindow.focus(); } catch (_) {} }, 50); }
+  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=49b9d7d725ce'; }
   if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); if (fromTool) fG.contentWindow.__field.back(); fG.contentWindow.focus(); } catch (_) {} } else if (t === 'tool') { try { fT.contentWindow.focus(); } catch (_) {} } }
 
 // <bone_sync>
@@ -34,4 +35,4 @@ window.__boneOuter = true;
 boneCloud({ use: n => { try { return window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null); } catch (_) { return Promise.resolve(null); } },
   status: (t, warn) => { const e = document.getElementById('cloudSt'); e.textContent = t.replace('（手元には残ってる）', '').replace('この端末に保存', ''); e.style.color = warn ? '#ffb199' : ''; },
   onWorks: () => { try { fG.contentWindow.__field.refresh(); } catch (_) {} },
-  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=a3ac0a079a94'; } });
+  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=49b9d7d725ce'; } });

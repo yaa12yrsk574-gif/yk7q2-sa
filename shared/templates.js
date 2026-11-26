@@ -191,7 +191,43 @@ window.BoneTemplates = (() => {
     const keys = []; for (let f = 0; f < 16; f += 2) keys.push({ f, pose: P(f / 16 * Math.PI * 2, 0.11) });
     return { R, acts: [{ slot: 'idle', name: '待機', anim: { len: 24, loop: true, guides: [{ f: 0, label: 'はじめ' }], keys: [{ f: 0, pose: P(0, 0.02) }, { f: 12, pose: P(Math.PI, 0.02) }], seg: {} } },
       { slot: 'walk', name: '歩き', anim: { len: 16, loop: true, guides: [{ f: 0, label: 'くねる' }, { f: 8, label: '逆にくねる' }], keys, seg: {} } }] }; }
-  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs }, hito: { name: '人の素体', data: hitoData, acts: hitoActs }, kumo: { name: 'クモ', data: kumoData, acts: kumoActs }, tori: { name: 'トリ', data: toriData, acts: toriActs }, hebi: { name: 'ヘビ', data: hebiData, acts: hebiActs } };
+
+  // ---- プルプル：脚のない丸いプニプニ。体の横に「突起」の芽（はじめは体の中にしまってある）。カニを見てマネした時に、にゅっと生える（puluSprout）----
+  const PULU_STUB = { pts: [[-.09, .09, .06], [-.15, .07, .13], [-.17, .03, .18], [-.17, .004, .2]], w: [[0, .022], [.5, .019], [1, .014]] }; /* 生えた時：細めの、先が丸い突起（爪にするのはプレイヤー） */
+  function puluData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: 10 });
+    add(1, null, null, [[0, .135, -.1], [0, .135, 0], [0, .135, .1]], PR([0, .06], [.22, .125], [.5, .14], [.78, .125], [1, .06]), PR([0, .06], [.22, .125], [.5, .14], [.78, .125], [1, .06]));
+    add(2, 1, 2, [[-.05, .1, .07], [-.06, .095, .08]], PR([0, .008], [1, .006]), PR([0, .008], [1, .006]));
+    twinOf(B, 2, 3); return finish(B, 'pulu', { id: 1, i: 1 }); }
+  const puluSprouted = D => { const b = D && D.bones && D.bones.find(x => x.id === 2); return !!b && Math.hypot(...sub(b.pts[b.pts.length - 1], b.pts[0])) > 0.05; };
+  function puluSprout(D) { const body = D.bones.find(b => b.parent == null) || D.bones[0]; for (const b of D.bones) { if (b.parent == null || b.pts.length < 2) continue; const sx = b.pts[0][0] < 0 || (b.pts[0][0] === 0 && b.id === 2) ? 1 : -1, w = PR(...PULU_STUB.w);
+      b.pts = PULU_STUB.pts.map(p => R4([p[0] * sx, p[1], p[2]])); b.wp = cl(w); b.wn = cl(w); b.dp = cl(w); b.dn = cl(w); b.sides = 10; const q = body.pts[b.at] || body.pts[body.pts.length - 1]; b.atOff = sub(b.pts[0], q).map(r4); } return D; }
+  function puluActs() { const D = puluSprout(puluData()), R = {}; for (const b of D.bones) R[b.id] = b.pts; const out = [];
+    // o：dx,dy,dz＝体ごとずらす、tip＝突起の先をずらす（[x,y,z]、左右同じ）、curl＝先を曲げる（爪のマネ）、one＝片方だけ（2）
+    const P = o => { o = Object.assign({ dx: 0, dy: 0, dz: 0, tip: [0, 0, 0], curl: 0, one: false }, o); const sh = p => R4([p[0] + o.dx, p[1] + o.dy, p[2] + o.dz]), out = {};
+      out[1] = R[1].map(sh); for (const id of [2, 3]) { const r = R[id], sx = id === 2 ? 1 : -1, on = !o.one || id === 2, t = on ? o.tip : [0, 0, 0], n = r.length - 1; let pts = r.map((p, i) => sh([p[0] + t[0] * sx * i / n, p[1] + t[1] * i / n, p[2] + t[2] * i / n]));
+        if (on && o.curl) pts = curl(pts, 0, o.curl); out[id] = pts.map(R4); } return out; };
+    const K = (f, o) => ({ f, pose: P(o) }), A = (slot, name, len, loop, guides, keys) => out.push({ slot, name, anim: { len, loop, guides: guides.map(([f, label]) => ({ f, label })), keys, seg: {} } });
+    A('idle', '待機', 24, true, [[0, 'はじめ'], [12, '息を吸う']], [K(0, {}), K(12, { dy: -0.006 })]);
+    // 歩き：ぷにぷに体を揺らしながら、突起で地面をかく（かいた分だけ、壁も登れる）
+    { const keys = []; for (let f = 0; f < 16; f += 2) { const u = f / 16 * Math.PI * 2, c = u < Math.PI; keys.push(K(f, { dy: 0.012 * Math.abs(Math.sin(u)), dz: 0.006 * Math.sin(u), tip: [0, c ? -0.04 * Math.sin(u) : 0.035 * Math.sin(u - Math.PI), 0.12 * Math.cos(u)] })); } /* かく時は先を地面に押しつけたまま後ろへ */
+      A('walk', '歩き', 16, true, [[0, 'かき始め'], [8, '戻す']], keys); }
+    { const keys = []; for (let f = 0; f < 12; f += 2) { const u = f / 12 * Math.PI * 2, c = u < Math.PI; keys.push(K(f, { dy: 0.022 * Math.abs(Math.sin(u)), dz: 0.01 * Math.sin(u), tip: [0, c ? -0.05 * Math.sin(u) : 0.05 * Math.sin(u - Math.PI), 0.16 * Math.cos(u)] })); }
+      A('run', '走る', 12, true, [[0, 'かき始め'], [6, '戻す']], keys); }
+    A('jump', 'ジャンプ', 14, false, [[0, '構え'], [5, '溜め'], [7, '踏み切り'], [14, '空中']], [K(0, {}), K(5, { dy: -0.05, tip: [0, 0.01, -0.02] }), K(7, { dy: 0.07, tip: [0, -0.01, 0.02] }), K(14, { dy: 0.07, tip: [0, 0.04, -0.03] })]);
+    A('attack', 'はさむ', 14, false, [[0, 'かまえ'], [4, '溜め'], [8, '打つ'], [14, '戻り']], [K(0, {}), K(4, { dz: -0.01, tip: [0, 0.07, 0.04] }), K(8, { dz: 0.02, tip: [0, 0.015, 0.1], curl: 0.6 }), K(14, {})]);
+    // 仕草
+    A('g_look', 'きょろきょろ', 24, false, [[0, 'ふだん'], [5, '右'], [14, '左']], [K(0, {}), K(5, { dx: 0.015, dz: 0.005 }), K(10, { dx: 0.015 }), K(14, { dx: -0.015, dz: 0.005 }), K(19, { dx: -0.015 }), K(24, {})]);
+    A('g_tilt', '首かしげ', 18, false, [[0, 'ふだん'], [5, 'かしげる'], [13, '戻る']], [K(0, {}), K(5, { dx: 0.02, dy: -0.006, one: true, tip: [0, 0.02, 0] }), K(13, { dx: 0.022, dy: -0.007, one: true, tip: [0, 0.02, 0] }), K(18, {})]);
+    A('g_sniff', 'くんくん', 16, false, [[0, 'ふだん'], [3, '寄せる'], [11, '離す']], [K(0, {}), K(3, { dz: 0.02, dy: -0.01 }), K(5, { dz: 0.03, dy: -0.012 }), K(7, { dz: 0.02 }), K(9, { dz: 0.03, dy: -0.012 }), K(11, { dz: 0.01 }), K(16, {})]);
+    A('g_peek', 'のぞき込む', 24, false, [[0, 'ふだん'], [6, 'のぞく'], [18, '戻る']], [K(0, {}), K(6, { dz: 0.04, dy: -0.015 }), K(18, { dz: 0.045, dy: -0.017 }), K(24, {})]);
+    A('g_poke', 'つつく', 16, false, [[0, 'ふだん'], [5, 'つん'], [9, 'つん']], [K(0, {}), K(3, { one: true, tip: [0, 0.05, 0.02] }), K(5, { one: true, tip: [0, 0.01, 0.09] }), K(7, { one: true, tip: [0, 0.04, 0.03] }), K(9, { one: true, tip: [0, 0.01, 0.09] }), K(11, { one: true, tip: [0, 0.03, 0.02] }), K(16, {})]);
+    A('g_hop', 'ぴょんぴょん', 16, false, [[0, 'しゃがむ'], [4, 'ぴょん'], [12, 'ぴょん']], [K(0, {}), K(2, { dy: -0.02 }), K(4, { dy: 0.08, tip: [0, 0.04, 0] }), K(6, { dy: -0.015 }), K(8, {}), K(10, { dy: -0.02 }), K(12, { dy: 0.08, tip: [0, 0.04, 0] }), K(14, { dy: -0.015 }), K(16, {})]);
+    A('g_shake', 'ぷるぷる', 12, false, [[0, 'ふだん'], [1, 'ぷる'], [11, '止まる']], [K(0, {}), K(1, { dx: 0.02 }), K(3, { dx: -0.02 }), K(5, { dx: 0.018 }), K(7, { dx: -0.015 }), K(9, { dx: 0.01 }), K(12, {})]);
+    A('g_doze', 'うとうと', 48, true, [[0, 'とろん'], [24, 'こっくり']], [K(0, { dy: -0.012 }), K(24, { dy: -0.02, dz: 0.01 })]);
+    // 爪のマネ：突起を持ち上げて、先をくいっと曲げる（カニを見ながら）
+    A('g_claw', '爪のマネ', 30, false, [[0, 'ふだん'], [6, '持ち上げる'], [11, 'くいっ'], [20, 'くいっ']], [K(0, {}), K(6, { tip: [0, 0.06, 0.03] }), K(11, { tip: [0, 0.05, 0.04], curl: 1.4 }), K(15, { tip: [0, 0.06, 0.03], curl: 0.2 }), K(20, { tip: [0, 0.05, 0.04], curl: 1.5 }), K(25, { tip: [0, 0.05, 0.03], curl: 0.3 }), K(30, {})]);
+    return { R, acts: out }; }
+  const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs }, hito: { name: '人の素体', data: hitoData, acts: hitoActs }, kumo: { name: 'クモ', data: kumoData, acts: kumoActs }, tori: { name: 'トリ', data: toriData, acts: toriActs }, hebi: { name: 'ヘビ', data: hebiData, acts: hebiActs }, pulu: { name: 'プルプル', data: puluData, acts: puluActs } };
   const cache = {};
   const kindAct = k => cache[k] || (cache[k] = KINDS[k].acts());
   function detect(S) { if (S && S.tpl && KINDS[S.tpl.kind]) return S.tpl.kind; if (!S || !S.bones) return null;
@@ -203,5 +239,5 @@ window.BoneTemplates = (() => {
   function sample(A, f, id) { const K = A.keys; if (!K.length) return null; let a = K[0], b = null; for (const k of K) { if (k.f <= f) a = k; else { b = k; break; } } if (!b && A.loop) b = { f: A.len, pose: K[0].pose }; const pa = a.pose[id]; if (!b || !pa) return pa ? cl(pa) : null; const pb = b.pose[id]; if (!pb || pb.length !== pa.length) return cl(pa); const t = (f - a.f) / ((b.f - a.f) || 1); return pa.map((p, i) => R4(p.map((v, k) => v + (pb[i][k] - v) * t))); }
   // お手本の骨の上でポーズを作る（野生個体の動き用。工房と同じ骨・同じポーズの作り方）
   const poseOf = (kind, o) => kind === 'tokage' ? tokPose(kindAct('tokage').R, o) : kind === 'tsubasa' ? tsuPose(kindAct('tsubasa').R, o) : null;
-  return { KINDS, detect, animFor, slots, sample, retarget, poseOf, data: k => KINDS[k] && KINDS[k].data() };
+  return { KINDS, detect, animFor, slots, sample, retarget, poseOf, puluSprout, puluSprouted, data: k => KINDS[k] && KINDS[k].data() };
 })();
