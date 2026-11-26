@@ -2,7 +2,7 @@
 // 叶うと乗せられる体（0.7m）になる。乗った時に初めてプルプルを操作できる（それまでは、ついて行くのが主）
 // ここは「ペンギン」と「プルプルの頭の中（自分で動く・芝居）」だけ。体の物理は body.js、見た目は skin.js、つなぐのは app.js
 window.PlayStory = (() => {
-  const SIZE = { small: 0.4, big: 0.7 }, PEN_H = 0.8, STEP = 0.22; /* ペンギンが乗り越えられる段差 */
+  const SIZE = { small: 0.4, big: 0.7, huge: 1.15 }, PEN_H = 0.8, STEP = 0.22; /* ペンギンが乗り越えられる段差 */
   const turnTo = (a, b, s) => { const d = Math.atan2(Math.sin(b - a), Math.cos(b - a)); return a + Math.max(-s, Math.min(s, d)); };
   const rectDist = (b, x, z) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.z0 - z, 0, z - b.z1));
 
@@ -51,7 +51,7 @@ window.PlayStory = (() => {
   // 落ち着き：動くのは用がある時だけ。それ以外はその場でじっと見てる
   function brain(world, opts) {
     const flower = opts.flower;
-    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'drift', t: 0, dr: null, w0: null, mt2: null, pat: 0, hold: 0, steps: 0, eyed: false, sprouted: false, clawT: 0, soft: false, clawPose: 0, stage: 1, got: 0, cr: null, ct: 0, carryOK: false, afterGrow: null, crouch: false, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
+    const S = {}; const reset = () => Object.assign(S, { crabDone: false, tries: 0, observed: false, back: false, cl: null, fv: 0, lap0: 0, r: null, rt: 0, cd: {}, curT: null, nextG: null, walkT: 0, stillT: 0, mimic: false, mimicked: 0, mt: null, it: null, seq: null, ca: null, said: 0, mid: null, k: 0, tiltT: 0, held: 0, n: 0, leg: null, pushing: 0, under: 0, did: 0, front: null, edge: null, st: 'drift', t: 0, dr: null, w0: null, mt2: null, pat: 0, hold: 0, steps: 0, eyed: false, sprouted: false, clawT: 0, soft: false, clawPose: 0, stage: 1, got: 0, q: '', wingSprout: 0, rt: 0, got3: 0, cr: null, ct: 0, carryOK: false, afterGrow: null, crouch: false, wait: 0, far: 0, tilt: 0, emo: null, emoT: 0, wished: false, look: 0, land: null, rock: null, tries: 0, cool: 0, moving: false });
     reset();
     // 記号や絵は出さない。気持ちは全部 動きで出す（プレイヤーが読み取る）。say は「ぷるっ」と体で反応するだけ
     let sq = null; const say = (k) => { if (sq) sq(k === 'big' ? 2.4 : 1.4); };
@@ -288,6 +288,21 @@ window.PlayStory = (() => {
           return null; }
         case 'swimBack': { const tx = Math.max(-6, Math.min(8, pen.x)), tz = BE.SHORE - 1.2; swimTo(B, tx, tz, dt); // 浜へ戻る
           if (h.z < BE.SHORE - 1.0) { h.y = 0; S.st = 'grow'; S.t = 0; ctx.growDone && ctx.growDone(); return idle; } return null; }
+        // ---- 3つ目の願い：鳥（1匹なら飛べる → 乗せると滑空だけ）----
+        case 'flySolo': { const Q = ctx.quest; // 工房から戻ったら、まず1匹で飛んでみせる
+          if (!S.fs) S.fs = { x0: h.x, z0: h.z, a: Math.atan2(h.x - pen.x, h.z - pen.z) };
+          if (S.t < 0.8) { h.y = 0; ctx.lift && ctx.lift(-0.2, 0.1, 0); return idle; }
+          if (!S.fsUp) { S.fsUp = 1; ctx.lift && ctx.lift(null, 0, 0); say('big'); }
+          if (!h.gest) G(B, 'g_flap');
+          if (S.t < 2.4) { const u = (S.t - 0.8) / 1.6; h.y = 2.0 * (1 - Math.pow(1 - u, 2)); h.st = 'ground'; return null; }
+          if (S.t < 7.4) { S.fs.a += dt * 1.15; const r = 2.4, tx = pen.x + Math.sin(S.fs.a) * r, tz = pen.z + Math.cos(S.fs.a) * r; h.yaw = Math.atan2(tx - h.x, tz - h.z) || h.yaw; h.x = tx; h.z = tz; h.y = 2.0 + 0.35 * Math.sin(S.t * 2.3); return null; } /* ペンギンのまわりを、うれしそうにぐるぐる */
+          if (S.t < 8.6) { h.y = Math.max(0, h.y - dt * 2.2); return null; }
+          h.y = 0; S.fs = null; S.fsUp = 0; S.st = 'invite'; S.t = 0; S.crouch = false; S.q = 'glide'; ctx.squash && ctx.squash(2.4); G(B, 'g_hop'); return idle; }
+        // ---- 3段階目：沖の深い所のかけらを集めに行く → 大きくなって、やっと乗せて飛べる ----
+        case 'deepGo': { const Q = ctx.quest, fs = Q.deep.filter(f => f.st === 'float'); if (!fs.length) { S.st = 'deepBack'; S.t = 0; return null; }
+          let f = fs[0], bd = 1e9; for (const q of fs) { const d = Math.hypot(q.m.position.x - h.x, q.m.position.z - h.z); if (d < bd) { bd = d; f = q; } }
+          swimTo(B, f.m.position.x, f.m.position.z, dt); if (bd < 0.35 + B.radius * 0.5) { Q.take(f, () => [h.x, h.y + B.Hm * 0.5, h.z]); S.got3 = (S.got3 || 0) + 1; ctx.grow3 && ctx.grow3(S.got3 / Q.deep.length); say('big'); } return null; }
+        case 'deepBack': { const tx = Math.max(-6, Math.min(8, pen.x)), tz = BE.SHORE - 1.4; swimTo(B, tx, tz, dt); if (h.z < BE.SHORE - 1.2) { h.y = 0; S.st = 'grow'; S.t = 0; ctx.growDone3 && ctx.growDone3(); return idle; } return null; }
         case 'invite': { // 大きくなった！ ペンギンの横に来て、しゃがんで背中を向ける（乗って！）
           const a = pen.yaw + Math.PI / 2, tx = pen.x + Math.sin(a) * (B.radius + 0.5), tz = pen.z + Math.cos(a) * (B.radius + 0.5), r = go(B, tx, tz, dPen > 3 ? 1 : 0.5, 0.15);
           if (r.d > 0.15 && S.t < 6) { if (S.crouch) { S.crouch = false; ctx.lift(null, 0, 0); } return r; }
@@ -295,7 +310,19 @@ window.PlayStory = (() => {
         case 'grow': face(B, pen.x, pen.z, dt); return idle;
         case 'follow': case 'roam': default: return roam(B, pen, dt, ctx, rock, dPen);
       } }
-    return { S, tick, reset };
+
+    // ---- 乗ってる間に起きること（鳥を見上げる・海に呼ばれる）。true を返したら、その間は操作できない ----
+    function rideTick(B, pen, dt, ctx) { const h = B.h, Q = ctx.quest; S.rt = (S.rt || 0) + dt; const tiltTo = v => { S.tilt += (v - S.tilt) * Math.min(1, dt * 4); };
+      if (!S.q && S.carryOK && S.stage === 2 && Math.hypot(h.x - Q.cliff.x, h.z - Q.cliff.z) < 9) { S.q = 'birdWatch'; S.rt = 0; Q.bird.takeoff(); }
+      if (S.q === 'birdWatch') { const b = Q.bird; h.yaw = turnTo(h.yaw, Math.atan2(b.x - h.x, b.z - h.z), 3 * dt); tiltTo(0.55); h.v = 0; /* 見上げる（鳥が飛び立って、大きく旋回する） */
+        if (S.rt > 2.6 && !S.wingSprout) { S.wingSprout = 1; ctx.sproutWings && ctx.sproutWings(); say('big'); } /* マネしたくて、背中から羽の芽がにゅっ */
+        if (S.rt > 3.2 && !h.gest && S.rt < 8) G(B, 'g_flap'); if (S.rt > 8.5) { S.q = 'want3'; S.stage = 3; tiltTo(0); } return true; }
+      if (S.q === 'want3') { tiltTo(0); if (S.back) { S.back = false; if (ctx.wingOK && ctx.wingOK()) { S.q = 'solo'; ctx.dismount && ctx.dismount(); S.st = 'flySolo'; S.t = 0; } } return false; }
+      if (S.q === 'glideDone' && h.z > BE.SAND0 && h.st === 'ground') { S.q = 'seaCall'; S.rt = 0; }
+      if (S.q === 'seaCall') { const G2 = Q.glowP; h.yaw = turnTo(h.yaw, Math.atan2(G2.x - h.x, G2.z - h.z), 2.5 * dt); tiltTo(0.15); h.v = 0; Q.glowK = 1 + Math.min(1, S.rt / 2) * 0.8; /* 沖の底が光る。呼ばれてる */
+        if (S.rt > 3.2) { S.q = 'deep'; tiltTo(0); ctx.dismount && ctx.dismount(); BE.SWIM_MAX = BE.SHORE + 15; Q.showDeep(); S.st = 'deepGo'; S.t = 0; S.got3 = 0; say('big'); } return true; }
+      tiltTo(0); return false; }
+    return { S, tick, reset, rideTick };
   }
 
   // 岩の上の花（プルプルが見つけて登りたくなるもの）

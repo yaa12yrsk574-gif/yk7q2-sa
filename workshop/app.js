@@ -1542,14 +1542,14 @@ window.__editWork = id => { const w = loadWorks().find(x => x.id === id); if (!w
   { const P = S.bones.flatMap(b => b.pts), mn = [0, 1, 2].map(i => Math.min(...P.map(p => p[i]))), mx = [0, 1, 2].map(i => Math.max(...P.map(p => p[i]))); orbit.tx = (mn[0] + mx[0]) / 2; orbit.ty = (mn[1] + mx[1]) / 2; orbit.tz = (mn[2] + mx[2]) / 2; orbit.dist = Math.max(1.0, Math.min(3, Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) * 3)); }
   JUDGE.reset(); return true; };
 // ============ 判定：いじってる最中に、体の形が「何ができる体か」を満たしたらパッと点く。まだ見つけてへん判定は「？？？」 ============
-const JUDGE = (() => { const LIST = [['claw', '爪', '先が細くて、反ってる'], ['carry', '支える脚', '脚が太くて、どっしり'], ['wing', '羽', '']], FKEY = 'yuya_judge_found';
+const JUDGE = (() => { const LIST = [['claw', '爪', '先が細くて、反ってる'], ['carry', '支える脚', '脚が太くて、どっしり'], ['wing', '羽', '平たくて、大きい']], FKEY = 'yuya_judge_found';
   let found = {}; try { found = JSON.parse(localStorage.getItem(FKEY) || '{}') || {}; } catch (_) {}
   const box = document.createElement('div'); box.id = 'judgeBox'; box.style.cssText = 'position:fixed;left:12px;z-index:40;display:none;gap:10px;padding:6px 12px 5px;border-radius:14px;background:#fffdf8e6;box-shadow:0 2px 10px #0002;font:800 11px sans-serif;color:#5b554c;pointer-events:none';
   const els = {}; for (const [k] of LIST) { const d = document.createElement('div'); d.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;transition:transform .25s';
     d.innerHTML = '<div class="jr" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff"></div><div class="jl"></div>'; box.appendChild(d); els[k] = d; }
   document.body.appendChild(box); const st = document.createElement('style'); st.textContent = '@keyframes jpop{0%{transform:scale(1)}35%{transform:scale(1.45)}70%{transform:scale(.92)}100%{transform:scale(1)}}'; document.head.appendChild(st);
   let last = {}, prev = {};
-  function calc() { const bones = S.bones || [], J = window.BoneJudge; if (!J) return {}; return { claw: J.clawJudge(bones), carry: J.carryJudge(bones, null, 0.7), wing: { ok: false, p: 0 } }; }
+  function calc() { const bones = S.bones || [], J = window.BoneJudge; if (!J) return {}; return { claw: J.clawJudge(bones), carry: J.carryJudge(bones, null, 0.7), wing: J.wingJudge(bones) }; }
   const hardG = new THREE.Group(); scene.add(hardG); let hard = null, hardKey = '';
   function hardTick(R, on) { const key = on ? (R.claw && R.claw.ok ? 'c' : '') + (R.carry && R.carry.ok ? 'l' : '') + ':' + S.bones.length + ':' + S.bones.map(b => window.BoneJudge.rr(b, 0.74).toFixed(3)).join() : ''; /* 判定が点いた所だけ、固いものが表に出る（草原と同じ見た目） */
     if (key !== hardKey) { hardKey = key; if (hard) hard.dispose(); hardG.clear(); hard = null; if (on && key[0] !== ':') { const rest = Object.fromEntries(S.bones.map(b => [b.id, b.pts])); hard = window.BoneJudge.hardParts({ D: { bones: S.bones }, rest }, hardG); } }

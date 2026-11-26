@@ -11,7 +11,7 @@ window.PlayPad = (() => {
   function resample(pts) { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); const T = L[L.length - 1] || 1, out = [];
     for (let k = 0; k < N; k++) { const d = T * k / (N - 1); let i = 1; while (i < L.length - 1 && L[i] < d) i++; const a = L[i - 1], b = L[i], u = b > a ? (d - a) / (b - a) : 0; out.push([pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u]); } return out; }
   function create(el) {
-    const cv = el.querySelector('canvas'), g = cv.getContext('2d'), st = { moves: [], strokes: {}, workId: null, edit: null, act: { active: false, move: null, p: 0, pmax: 0, tap: false, down: false, up: false }, trail: [], press: 0, airTap: false };
+    const cv = el.querySelector('canvas'), g = cv.getContext('2d'), st = { moves: [], strokes: {}, workId: null, edit: null, act: { active: false, move: null, p: 0, pmax: 0, tap: false, down: false, up: false }, trail: [], press: 0, airTap: false, raw: { down: false, dy: 0, last: 0, id: null } };
     let all = load(), drag = null, W = 0, H = 0;
     const size = () => { const r = cv.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; g.setTransform(d, 0, 0, d, 0, 0); }; addEventListener('resize', size); size();
     const P = q => [q[0] * W, q[1] * H], at = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / W, (e.clientY - r.top) / H]; };
@@ -19,15 +19,16 @@ window.PlayPad = (() => {
     st.reset = m => { const mine = all[st.workId] || {}; delete mine[m]; all[st.workId] = mine; save(all); st.strokes[m] = resample(DEF[m]); draw(); };
     // 進み具合：今いる所の近く（前後数点）から一番近い点を探す（線が交差しても飛ばんように）
     const progress = (s, q, i0) => { let best = i0, bd = 1e9; for (let i = Math.max(0, i0 - 6); i <= Math.min(N - 1, i0 + 6); i++) { const d = Math.hypot(s[i][0] - q[0], s[i][1] - q[1]); if (d < bd) { bd = d; best = i; } } return best; };
-    cv.addEventListener('pointerdown', e => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) {} const q = at(e);
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) {} const q = at(e); st.raw.down = true; st.raw.id = e.pointerId; st.raw.last = q[1];
       if (st.edit) { drag = { id: e.pointerId, draw: [q] }; return; }
       let pick = null, pd = 0.16; for (const m of st.moves) { const s = st.strokes[m], d = Math.hypot(s[0][0] - q[0], s[0][1] - q[1]); if (d < pd) { pd = d; pick = m; } }
       st.press++; st.airTap = true; if (!pick) { drag = { id: e.pointerId, none: true }; return; }
       drag = { id: e.pointerId, move: pick, i: 0, t0: performance.now(), moved: false }; Object.assign(st.act, { active: true, move: pick, p: 0, pmax: 0, down: true, tap: false }); st.trail = [q]; draw(); });
-    cv.addEventListener('pointermove', e => { if (!drag || e.pointerId !== drag.id) return; const q = at(e);
+    cv.addEventListener('pointermove', e => { if (e.pointerId === st.raw.id && st.raw.down) { const y = at(e)[1]; st.raw.dy += y - st.raw.last; st.raw.last = y; } /* 生の縦の動き（爪で掻く） */
+      if (!drag || e.pointerId !== drag.id) return; const q = at(e);
       if (drag.draw) { drag.draw.push(q); draw(drag.draw); return; } if (drag.none) return;
       const s = st.strokes[drag.move]; drag.i = progress(s, q, drag.i); const p = drag.i / (N - 1); if (Math.abs(p - st.act.p) > 0.02) drag.moved = true; st.act.p = p; st.act.pmax = Math.max(st.act.pmax, p); st.trail.push(q); if (st.trail.length > 40) st.trail.shift(); draw(); });
-    const end = e => { if (!drag || e.pointerId !== drag.id) return;
+    const end = e => { if (e.pointerId === st.raw.id) st.raw.down = false; if (!drag || e.pointerId !== drag.id) return;
       if (drag.draw) { if (drag.draw.length > 4) { const m = st.edit, mine = all[st.workId] || {}; mine[m] = resample(drag.draw).map(q => [+q[0].toFixed(3), +q[1].toFixed(3)]); all[st.workId] = mine; save(all); st.strokes[m] = resample(mine[m]); } st.edit = null; el.classList.remove('editing'); drag = null; draw(); return; }
       if (!drag.none) { st.act.active = false; st.act.up = true; if (!drag.moved && performance.now() - drag.t0 < 350) st.act.tap = true; } drag = null; st.trail = []; draw(); };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
@@ -57,7 +58,7 @@ window.PlayPad = (() => {
         g.fillStyle = col; g.font = '900 13px sans-serif'; g.textAlign = 'center'; g.fillText(Math.round(pc.open * 100) + '%', cx, cy); }
       else if (pc.on && st.edit == null) { g.globalAlpha = 0.55; g.fillStyle = '#3d8a4f'; g.font = '700 12px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.fillText('✌ 2本指でつまむ＝ハサミ', W / 2, H - 8); g.globalAlpha = 1; }
       if (tmp && tmp.length > 1) { g.strokeStyle = MOVES[st.edit].col; g.lineWidth = 6; g.globalAlpha = 1; g.beginPath(); tmp.forEach((q, i) => { const [x, y] = P(q); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); } }
-    st.read = () => { const a = Object.assign({}, st.act, { press: st.press > 0, airTap: st.airTap, pinch: Object.assign({}, st.pinch) }); st.pinch.down = st.pinch.up = false; st.act.tap = st.act.down = st.act.up = false; st.press = 0; st.airTap = false; return a; };
+    st.read = () => { const a = Object.assign({}, st.act, { press: st.press > 0, airTap: st.airTap, pinch: Object.assign({}, st.pinch), raw: { down: st.raw.down, dy: st.raw.dy } }); st.raw.dy = 0; st.pinch.down = st.pinch.up = false; st.act.tap = st.act.down = st.act.up = false; st.press = 0; st.airTap = false; return a; };
     st.draw = draw; return st; }
   return { MOVES, create };
 })();

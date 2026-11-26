@@ -197,15 +197,21 @@ window.BoneTemplates = (() => {
   function puluData() { const B = [], add = (id, parent, at, pts, w, d) => B.push({ id, parent, at, pts: pts.map(R4), wp: w, wn: cl(w), dp: d, dn: cl(d), off: {}, sides: id === 1 ? 18 : 10 }); /* 体はなめらかに（透けると角が目立つ） */
     add(1, null, null, [[0, .135, -.1], [0, .135, 0], [0, .135, .1]], PR([0, .06], [.22, .125], [.5, .14], [.78, .125], [1, .06]), PR([0, .06], [.22, .125], [.5, .14], [.78, .125], [1, .06]));
     add(2, 1, 2, [[-.05, .1, .07], [-.06, .095, .08]], PR([0, .008], [1, .006]), PR([0, .008], [1, .006]));
-    twinOf(B, 2, 3); return finish(B, 'pulu', { id: 1, i: 1 }); }
+    twinOf(B, 2, 3);
+    add(4, 1, 1, [[-.04, .2, -.02], [-.05, .205, -.025]], PR([0, .006], [1, .005]), PR([0, .006], [1, .005])); twinOf(B, 4, 5); /* 羽の芽（背中にしまってある） */
+    return finish(B, 'pulu', { id: 1, i: 1 }); }
+  const PULU_WING = { pts: [[-.07, .22, -.02], [-.16, .27, -.05], [-.25, .285, -.09]], w: [[0, .028], [.6, .026], [1, .016]] }; /* 生えた時：丸い小さな突起（羽にするのはプレイヤー） */
+  const puluWinged = D => { const b = D && D.bones && D.bones.find(x => x.id === 4); return !!b && Math.hypot(...sub(b.pts[b.pts.length - 1], b.pts[0])) > 0.05; };
+  function puluSproutWings(D) { const body = D.bones.find(b => b.parent == null) || D.bones[0]; for (const id of [4, 5]) { const b = D.bones.find(x => x.id === id); if (!b) continue; const sx = id === 4 ? 1 : -1, w = PR(...PULU_WING.w);
+      b.pts = PULU_WING.pts.map(p => R4([p[0] * sx, p[1], p[2]])); b.wp = cl(w); b.wn = cl(w); b.dp = cl(w); b.dn = cl(w); b.sides = 10; const q = body.pts[b.at] || body.pts[1]; b.atOff = sub(b.pts[0], q).map(r4); } return D; }
   const puluSprouted = D => { const b = D && D.bones && D.bones.find(x => x.id === 2); return !!b && Math.hypot(...sub(b.pts[b.pts.length - 1], b.pts[0])) > 0.05; };
-  function puluSprout(D) { const body = D.bones.find(b => b.parent == null) || D.bones[0]; for (const b of D.bones) { if (b.parent == null || b.pts.length < 2) continue; const sx = b.pts[0][0] < 0 || (b.pts[0][0] === 0 && b.id === 2) ? 1 : -1, w = PR(...PULU_STUB.w);
+  function puluSprout(D) { const body = D.bones.find(b => b.parent == null) || D.bones[0]; for (const b of D.bones) { if (b.parent == null || b.pts.length < 2 || (b.id !== 2 && b.id !== 3)) continue; const sx = b.pts[0][0] < 0 || (b.pts[0][0] === 0 && b.id === 2) ? 1 : -1, w = PR(...PULU_STUB.w);
       b.pts = PULU_STUB.pts.map(p => R4([p[0] * sx, p[1], p[2]])); b.wp = cl(w); b.wn = cl(w); b.dp = cl(w); b.dn = cl(w); b.sides = 10; const q = body.pts[b.at] || body.pts[body.pts.length - 1]; b.atOff = sub(b.pts[0], q).map(r4); } return D; }
-  function puluActs() { const D = puluSprout(puluData()), R = {}; for (const b of D.bones) R[b.id] = b.pts; const out = [];
+  function puluActs() { const D = puluSproutWings(puluSprout(puluData())), R = {}; for (const b of D.bones) R[b.id] = b.pts; const out = [];
     // o：dx,dy,dz＝体ごとずらす、tip＝突起の先をずらす（[x,y,z]、左右同じ）、curl＝先を曲げる（爪のマネ）、one＝片方だけ（2）
-    const P = o => { o = Object.assign({ dx: 0, dy: 0, dz: 0, tip: [0, 0, 0], curl: 0, one: false }, o); const sh = p => R4([p[0] + o.dx, p[1] + o.dy, p[2] + o.dz]), out = {};
+    const P = o => { o = Object.assign({ dx: 0, dy: 0, dz: 0, tip: [0, 0, 0], curl: 0, one: false, wing: 0 }, o); const sh = p => R4([p[0] + o.dx, p[1] + o.dy, p[2] + o.dz]), out = {};
       out[1] = R[1].map(sh); for (const id of [2, 3]) { const r = R[id], sx = id === 2 ? 1 : -1, on = !o.one || id === 2, t = on ? o.tip : [0, 0, 0], n = r.length - 1; let pts = r.map((p, i) => sh([p[0] + t[0] * sx * i / n, p[1] + t[1] * i / n, p[2] + t[2] * i / n]));
-        if (on && o.curl) pts = curl(pts, 0, o.curl); out[id] = pts.map(R4); } return out; };
+        if (on && o.curl) pts = curl(pts, 0, o.curl); out[id] = pts.map(R4); } for (const id of [4, 5]) { const r = R[id]; if (!r) continue; const n = r.length - 1; out[id] = r.map((p, i) => sh([p[0], p[1] + o.wing * 0.09 * i / n, p[2]])); } return out; }; /* wing＝羽を上下にパタパタ（＋で上、−で下） */
     const K = (f, o) => ({ f, pose: P(o) }), A = (slot, name, len, loop, guides, keys) => out.push({ slot, name, anim: { len, loop, guides: guides.map(([f, label]) => ({ f, label })), keys, seg: {} } });
     A('idle', '待機', 24, true, [[0, 'はじめ'], [12, '息を吸う']], [K(0, {}), K(12, { dy: -0.006 })]);
     // 歩き：ぷにぷに体を揺らしながら、突起で地面をかく（かいた分だけ、壁も登れる）
@@ -226,6 +232,7 @@ window.BoneTemplates = (() => {
     A('g_doze', 'うとうと', 48, true, [[0, 'とろん'], [24, 'こっくり']], [K(0, { dy: -0.012 }), K(24, { dy: -0.02, dz: 0.01 })]);
     // 爪のマネ：突起を持ち上げて、先をくいっと曲げる（カニを見ながら）
     A('g_claw', '爪のマネ', 30, false, [[0, 'ふだん'], [6, '持ち上げる'], [11, 'くいっ'], [20, 'くいっ']], [K(0, {}), K(6, { tip: [0, 0.06, 0.03] }), K(11, { tip: [0, 0.05, 0.04], curl: 1.4 }), K(15, { tip: [0, 0.06, 0.03], curl: 0.2 }), K(20, { tip: [0, 0.05, 0.04], curl: 1.5 }), K(25, { tip: [0, 0.05, 0.03], curl: 0.3 }), K(30, {})]);
+    A('g_flap', '羽ばたきのマネ', 24, false, [[0, 'ふだん'], [3, '上'], [6, '下']], [K(0, {}), K(3, { wing: 1, dy: 0.01 }), K(6, { wing: -0.8, dy: 0.03 }), K(9, { wing: 1, dy: 0.01 }), K(12, { wing: -0.8, dy: 0.03 }), K(15, { wing: 1 }), K(18, { wing: -0.8, dy: 0.02 }), K(24, {})]);
     return { R, acts: out }; }
   const KINDS = { tokage: { name: 'ツノトカゲ', data: tokageData, acts: tokageActs }, tsubasa: { name: 'ツバサトカゲ', data: tsubasaData, acts: tsubasaActs }, hito: { name: '人の素体', data: hitoData, acts: hitoActs }, kumo: { name: 'クモ', data: kumoData, acts: kumoActs }, tori: { name: 'トリ', data: toriData, acts: toriActs }, hebi: { name: 'ヘビ', data: hebiData, acts: hebiActs }, pulu: { name: 'プルプル', data: puluData, acts: puluActs } };
   const cache = {};
@@ -239,5 +246,5 @@ window.BoneTemplates = (() => {
   function sample(A, f, id) { const K = A.keys; if (!K.length) return null; let a = K[0], b = null; for (const k of K) { if (k.f <= f) a = k; else { b = k; break; } } if (!b && A.loop) b = { f: A.len, pose: K[0].pose }; const pa = a.pose[id]; if (!b || !pa) return pa ? cl(pa) : null; const pb = b.pose[id]; if (!pb || pb.length !== pa.length) return cl(pa); const t = (f - a.f) / ((b.f - a.f) || 1); return pa.map((p, i) => R4(p.map((v, k) => v + (pb[i][k] - v) * t))); }
   // お手本の骨の上でポーズを作る（野生個体の動き用。工房と同じ骨・同じポーズの作り方）
   const poseOf = (kind, o) => kind === 'tokage' ? tokPose(kindAct('tokage').R, o) : kind === 'tsubasa' ? tsuPose(kindAct('tsubasa').R, o) : null;
-  return { KINDS, detect, animFor, slots, sample, retarget, poseOf, puluSprout, puluSprouted, data: k => KINDS[k] && KINDS[k].data() };
+  return { KINDS, detect, animFor, slots, sample, retarget, poseOf, puluSprout, puluSprouted, puluSproutWings, puluWinged, data: k => KINDS[k] && KINDS[k].data() };
 })();

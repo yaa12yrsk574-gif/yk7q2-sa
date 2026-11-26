@@ -3,7 +3,7 @@
 window.PlayBody = (() => {
   let S = null; const core = window.BoneCore.create(THREE, () => S, v => { S = v; }), { poseAt, boneGeom } = core;
   const clone = o => JSON.parse(JSON.stringify(o)), TPL = window.BoneTemplates, FR = 24;
-  const GEST = ['g_look', 'g_tilt', 'g_sniff', 'g_peek', 'g_poke', 'g_hop', 'g_shake', 'g_doze', 'g_claw'], SLOTS = ['idle', 'walk', 'run', 'jump', 'flap', 'attack'].concat(GEST), TAP_MAX = 1.9; /* 普段のジャンプの高さの上限（m）。これより上は腕（勝負ジャンプ）が要る */
+  const GEST = ['g_look', 'g_tilt', 'g_sniff', 'g_peek', 'g_poke', 'g_hop', 'g_shake', 'g_doze', 'g_claw', 'g_flap'], SLOTS = ['idle', 'walk', 'run', 'jump', 'flap', 'attack'].concat(GEST), TAP_MAX = 1.9; /* 普段のジャンプの高さの上限（m）。これより上は腕（勝負ジャンプ）が要る */
   // 足元を地面、真ん中を原点に（狩り場と同じ置き方）
   function prep(d) { const D = clone(d); D.bones = D.bones.filter(b => b.pts && b.pts.length >= 2); let minY = 1e9, sx = 0, sz = 0, n = 0;
     for (const b of D.bones) for (const p of b.pts) { minY = Math.min(minY, p[1]); sx += p[0]; sz += p[2]; n++; }
