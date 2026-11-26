@@ -109,8 +109,8 @@ window.PlayBeach = (() => {
       const sl = Math.atan(0.28), L = 4.3 / Math.cos(sl), sea0 = new THREE.Mesh(new THREE.PlaneGeometry(90, L), mat(0xc2ab78)); sea0.rotation.x = -Math.PI / 2 + sl; sea0.position.set(0, -0.61, SHORE + 2.15); scene.add(sea0); /* 海の底：波打ち際から沖へ下がる */
       const deep = new THREE.Mesh(new THREE.PlaneGeometry(200, 120), mat(0x9c8c66)); deep.rotation.x = -Math.PI / 2; deep.position.set(0, -1.21, SHORE + 4.3 + 60); scene.add(deep); }
     // 海：前のふちが寄せては返す。ふちに白い泡
-    const wg = new THREE.PlaneGeometry(200, 120, 20, 40), wc = []; { const wp = wg.attributes.position, sh = new THREE.Color(0x8fe0e4), dp = new THREE.Color(0x2f7fa8), c = new THREE.Color(); for (let i = 0; i < wp.count; i++) { const d = 60 - wp.getY(i); c.copy(sh).lerp(dp, Math.min(1, d / 14)); wc.push(c.r, c.g, c.b); } wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3)); } /* 浅瀬は明るく、沖ほど濃い */
-    const water = new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 0.74, depthWrite: false })); water.rotation.x = -Math.PI / 2; water.renderOrder = 3; scene.add(water);
+    const wg = new THREE.PlaneGeometry(200, 120, 20, 60), wc = []; { const wp = wg.attributes.position, sh = new THREE.Color(0x9ff0ea), dp = new THREE.Color(0x2f7fa8), c = new THREE.Color(); for (let i = 0; i < wp.count; i++) { const d = 60 - wp.getY(i), u = Math.min(1, d / 14); c.copy(sh).lerp(dp, u); wc.push(c.r, c.g, c.b, 0.16 + 0.7 * Math.pow(Math.min(1, d / 11), 1.3)); } wg.setAttribute('color', new THREE.Float32BufferAttribute(wc, 4)); } /* 浅瀬は明るくて透明（中が見える）、沖ほど濃い */
+    const water = new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 1, depthWrite: false })); water.rotation.x = -Math.PI / 2; water.renderOrder = 3; scene.add(water);
 
     const lines = makeWaveLines(scene, B);
     B.waterZ = () => SHORE - 0.35 * Math.sin(B.t * 0.9) - B.surgeA * 1.6; /* 今の波のふち */
