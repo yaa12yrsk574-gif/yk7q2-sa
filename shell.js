@@ -2,7 +2,7 @@
 
 
 
-const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'), fP = document.getElementById('fPlay'); let playLoaded = false; fG.src = 'hunting.html?v=32ab379d1eed'; let toolLoaded = false;
+const fT = document.getElementById('fTool'), fG = document.getElementById('fGame'), fP = document.getElementById('fPlay'); let playLoaded = false; fG.src = /[?&]hunt/.test(location.search) ? 'hunting.html?v=32ab379d1eed' : 'tokage.html'; /* 本編はトカゲの夢。前の狩り場は ?hunt で */ let toolLoaded = false;
 // 狩り場はiframe。子だけのblurでは、画面分割やウィンドウ切替で取り逃す場合がある
 window.__gameOn = true;
 window.__openTool = () => document.querySelector('#tabs button[data-t="tool"]').click();
@@ -22,7 +22,7 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { if (b
 function switchTab(b) { const fromTool = fT.classList.contains('on'); stopGameMovement(); const t = b.dataset.t; window.__gameOn = t === 'game'; try { fG.contentWindow.__paused = t !== 'game'; } catch (_) {} document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   fT.classList.toggle('on', t === 'tool'); fG.classList.toggle('on', t === 'game'); fP.classList.toggle('on', t === 'play'); document.getElementById('tabs').style.display = t === 'game' ? 'none' : 'flex'; /* 狩り場では右タブを出さない。工房へはキャンプから */
   if (t === 'play') { if (!playLoaded) { playLoaded = true; fP.src = 'play.html?v=1ab9de8cd899'; } else { try { fP.contentWindow.__play.refresh(); } catch (_) {} } setTimeout(() => { try { fP.contentWindow.focus(); } catch (_) {} }, 50); }
-  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=ff4d24cb04c2'; }
+  if (t === 'tool' && !toolLoaded) { toolLoaded = true; fT.src = 'workshop.html?v=ca9d6cc2dd04'; }
   if (t === 'game') { try { fG.contentWindow.dispatchEvent(new Event('resize')); fG.contentWindow.__field.refresh(); if (fromTool) fG.contentWindow.__field.back(); fG.contentWindow.focus(); } catch (_) {} } else if (t === 'tool') { try { fT.contentWindow.focus(); } catch (_) {} } }
 
 // <bone_sync>
@@ -35,4 +35,4 @@ window.__boneOuter = true;
 boneCloud({ use: n => { try { return window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null); } catch (_) { return Promise.resolve(null); } },
   status: (t, warn) => { const e = document.getElementById('cloudSt'); e.textContent = t.replace('（手元には残ってる）', '').replace('この端末に保存', ''); e.style.color = warn ? '#ffb199' : ''; },
   onWorks: () => { try { fG.contentWindow.__field.refresh(); } catch (_) {} },
-  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=ff4d24cb04c2'; } });
+  onDraft: () => { if (toolLoaded) fT.src = 'workshop.html?v=ca9d6cc2dd04'; } });

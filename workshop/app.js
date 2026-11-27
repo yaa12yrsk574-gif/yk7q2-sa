@@ -1543,6 +1543,8 @@ window.__editWork = id => { const w = loadWorks().find(x => x.id === id); if (!w
   JUDGE.reset(); return true; };
 // ============ 判定：いじってる最中に、体の形が「何ができる体か」を満たしたらパッと点く。まだ見つけてへん判定は「？？？」 ============
 const JUDGE = (() => { const LIST = [['claw', '爪', '先が細くて、反ってる'], ['carry', '支える脚', '脚が太くて、どっしり'], ['wing', '羽', '平たくて、大きい']], FKEY = 'yuya_judge_found';
+  const TK_NAME = { carry: ['太い脚', '脚が太くて、どっしり'], wing: ['広い面', '平たくて、大きい'] }; /* トカゲの夢：3択で当てた札だけ出す */
+  const tkCards = () => { try { return JSON.parse(localStorage.getItem('yuya_tk_cards') || '[]'); } catch (_) { return []; } };
   let found = {}; try { found = JSON.parse(localStorage.getItem(FKEY) || '{}') || {}; } catch (_) {}
   const box = document.createElement('div'); box.id = 'judgeBox'; box.style.cssText = 'position:fixed;left:12px;z-index:40;display:none;gap:10px;padding:6px 12px 5px;border-radius:14px;background:#fffdf8e6;box-shadow:0 2px 10px #0002;font:800 11px sans-serif;color:#5b554c;pointer-events:none';
   const els = {}; for (const [k] of LIST) { const d = document.createElement('div'); d.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;transition:transform .25s';
@@ -1554,9 +1556,10 @@ const JUDGE = (() => { const LIST = [['claw', '爪', '先が細くて、反っ�
   function hardTick(R, on) { const key = on ? (R.claw && R.claw.ok ? 'c' : '') + (R.carry && R.carry.ok ? 'l' : '') + ':' + S.bones.length + ':' + S.bones.map(b => window.BoneJudge.rr(b, 0.74).toFixed(3)).join() : ''; /* 判定が点いた所だけ、固いものが表に出る（草原と同じ見た目） */
     if (key !== hardKey) { hardKey = key; if (hard) hard.dispose(); hardG.clear(); hard = null; if (on && key[0] !== ':') { const rest = Object.fromEntries(S.bones.map(b => [b.id, b.pts])); hard = window.BoneJudge.hardParts({ D: { bones: S.bones }, rest }, hardG); } }
     if (hard) { const P = Object.fromEntries(S.bones.map(b => [b.id, b.pts])); hard.update(P); } hardG.visible = mode !== 'anim'; }
-  function tick() { const on = !!(S && S.tpl && S.tpl.kind === 'pulu') && mode !== 'pose'; box.style.display = on ? 'flex' : 'none'; if (!on) { hardTick({}, false); return; }
+  function tick() { const tk = !!(S && S.story === 'tk'), on = (tk || !!(S && S.tpl && S.tpl.kind === 'pulu')) && mode !== 'pose'; box.style.display = on ? 'flex' : 'none'; if (!on) { hardTick({}, false); return; }
+    const tc = tk ? tkCards() : null; for (const [k] of LIST) els[k].style.display = tk && !(tc.includes(k) && TK_NAME[k]) ? 'none' : 'flex'; if (tk && !LIST.some(([k]) => tc.includes(k) && TK_NAME[k])) { box.style.display = 'none'; return; }
     const top = document.getElementById('top2') || document.getElementById('top'); box.style.top = ((top && top.getBoundingClientRect().bottom) || 60) + 8 + 'px'; /* 左上：トーストと重ならへん所 */
-    const R = calc(); hardTick(R, true); for (const [k, name, why] of LIST) { const r = R[k] || { ok: false, p: 0 }, d = els[k], ring = d.querySelector('.jr'), lb = d.querySelector('.jl'), known = !!found[k], p = Math.max(0, Math.min(1, r.p || 0));
+    const R = calc(); hardTick(R, !tk); for (const [k, name0, why0] of LIST) { if (tk && !(tc.includes(k) && TK_NAME[k])) continue; const name = tk ? TK_NAME[k][0] : name0, why = tk ? TK_NAME[k][1] : why0; const r = R[k] || { ok: false, p: 0 }, d = els[k], ring = d.querySelector('.jr'), lb = d.querySelector('.jl'), known = tk || !!found[k], p = Math.max(0, Math.min(1, r.p || 0));
       if (r.ok && !prev[k]) { if (!known) { found[k] = 1; try { localStorage.setItem(FKEY, JSON.stringify(found)); } catch (_) {} } d.style.animation = 'none'; void d.offsetWidth; d.style.animation = 'jpop .55s'; toast(name + 'ができた！ ' + why); }
       prev[k] = r.ok; const showP = known || p > 0.15, deg = Math.round((r.ok ? 1 : p) * 360), col = r.ok ? '#f0a020' : '#7fc7d9';
       ring.style.background = showP ? 'conic-gradient(' + col + ' ' + deg + 'deg,#e6e0d4 0)' : '#e6e0d4'; ring.style.boxShadow = r.ok ? '0 0 10px #f0a020' : 'none'; ring.textContent = r.ok ? '✓' : '';
